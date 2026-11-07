@@ -110,18 +110,19 @@ export default function ToolHome({
             Prepare documents, create passport and ID photos, and edit images and PDFs—all in one easy-to-use workspace.
           </p>
 
-          <label className="mx-auto mt-7 flex max-w-2xl items-center gap-3 rounded-2xl border border-ui bg-surface px-5 py-4 text-left shadow-sm transition duration-200 focus-within:border-action focus-within:shadow-md focus-within:shadow-action/10 focus-within:ring-4 focus-within:ring-action-subtle/70">
-            <Search className="h-5 w-5 shrink-0 text-action" aria-hidden="true" />
-            <span className="sr-only">Search tools</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search documents, photos, image tools, and PDFs..."
-              className="w-full bg-transparent text-sm text-ink-primary outline-none placeholder:text-ink-muted sm:text-base"
-            />
-          </label>
         </div>
+
+        <label className="sticky top-4 z-10 mx-auto mt-7 flex w-full max-w-2xl items-center gap-3 rounded-2xl border border-ui bg-surface px-5 py-4 text-left shadow-sm transition duration-200 focus-within:border-action focus-within:shadow-md focus-within:shadow-action/10 focus-within:ring-4 focus-within:ring-action-subtle/70">
+          <Search className="h-5 w-5 shrink-0 text-action" aria-hidden="true" />
+          <span className="sr-only">Search tools</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search documents, photos, image tools, and PDFs..."
+            className="w-full bg-transparent text-sm text-ink-primary outline-none placeholder:text-ink-muted sm:text-base"
+          />
+        </label>
 
         <section
           className="mx-auto mt-10 w-full max-w-6xl sm:mt-12"
