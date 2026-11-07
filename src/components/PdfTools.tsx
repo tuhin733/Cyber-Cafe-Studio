@@ -1026,16 +1026,8 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
           >
             {isProcessing ? (
               <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : operation === "split" ? (
-              <Scissors className="h-4 w-4" aria-hidden="true" />
-            ) : operation === "protect" ? (
-              <FileLock2 className="h-4 w-4" aria-hidden="true" />
-            ) : operation === "unlock" ? (
-              <LockKeyholeOpen className="h-4 w-4" aria-hidden="true" />
-            ) : operation === "rotate" ? (
-              <RotateCw className="h-4 w-4" aria-hidden="true" />
             ) : (
-              <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+              <selectedOperation.Icon className="h-4 w-4" aria-hidden="true" />
             )}
             {isProcessing ? "Working…" : selectedOperation.title}
           </button>
