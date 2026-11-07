@@ -18,6 +18,8 @@
     "electron:dist": "electron-builder --config electron-builder.config.cjs --win nsis"
   },
   "dependencies": {
+    "@pdfsmaller/pdf-decrypt": "^1.0.1",
+    "@pdfsmaller/pdf-encrypt": "^1.2.0",
     "electron-updater": "^6.8.9",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.446.0",

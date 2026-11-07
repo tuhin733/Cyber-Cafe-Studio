@@ -492,7 +492,7 @@ export function useProjectState() {
         const ts = new Date().toISOString().slice(0, 10);
         const documentType = DOC_CATEGORIES[defaultCategory].label;
         const saved = await savePDF(pdf, `${documentType}-${ts}.pdf`);
-        if (saved) notifyUserSuccess("Exported Successfully");
+        if (saved) notifyUserSuccess("PDF exported.");
       } catch (error) {
         console.error("Unable to save PDF", error);
         notifyUserError(

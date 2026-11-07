@@ -9,7 +9,7 @@
 <h2 align="center">Everything your cyber cafe needs.</h2>
 
 <p align="center">
-  Prepare documents, create passport and ID photos, and edit images—all in one
+  Prepare documents, create passport and ID photos, and edit images and PDFs—all in one
   easy-to-use workspace.
 </p>
 
@@ -18,6 +18,7 @@
 - **Doc Stitch:** Arrange and resize images on A4 pages, then export or print documents.
 - **Passport Photo Maker:** Create passport and ID photo sheets with configurable sizes and print layouts.
 - **Image Tools:** Crop, resize, compress, and convert photos and signatures.
+- **PDF Tools:** Merge and split PDFs, compress and convert files, organize and edit pages, and protect or unlock PDFs.
 - **Background Remover:** Remove portrait backgrounds and choose a replacement.
 
 ## Get started

@@ -42,6 +42,7 @@ import {
 import { getThemeColor } from "../theme/theme";
 import { useToolAutoSave } from "../hooks/useToolAutoSave";
 import AutoSaveStatusIndicator from "./AutoSaveStatusIndicator";
+import { notifyUserSuccess } from "../lib/userNotifications";
 
 type ToolMode = "resize" | "compress" | "convert" | "crop";
 type CompressionMode = "target" | "quality";
@@ -329,7 +330,6 @@ export default function ImageTools({ onClose }: { onClose: () => void }) {
   const [previewSize, setPreviewSize] = useState({ width: 0, height: 0 });
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [downloadToast, setDownloadToast] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const perspectiveOverlayRef = useRef<SVGSVGElement>(null);
@@ -459,12 +459,6 @@ export default function ImageTools({ onClose }: { onClose: () => void }) {
       if (result) URL.revokeObjectURL(result.url);
     };
   }, [result]);
-
-  useEffect(() => {
-    if (!downloadToast) return;
-    const timeoutId = window.setTimeout(() => setDownloadToast(false), 3000);
-    return () => window.clearTimeout(timeoutId);
-  }, [downloadToast]);
 
   const loadFile = async (file?: File) => {
     if (!file) return;
@@ -1047,7 +1041,7 @@ export default function ImageTools({ onClose }: { onClose: () => void }) {
     link.href = result.url;
     link.download = `${baseName(source.file.name)}-${mode}.${getImageExtension(result.format)}`;
     link.click();
-    setDownloadToast(true);
+    notifyUserSuccess("Image downloaded.");
   };
 
   const tabs: Array<{ id: ToolMode; label: string; caption: string; icon: LucideIcon }> = [
@@ -1106,15 +1100,6 @@ export default function ImageTools({ onClose }: { onClose: () => void }) {
     : null;
   return (
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-muted">
-      {downloadToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-preview px-4 py-2.5 text-sm font-medium text-ink-inverse shadow-lg"
-        >
-          Download complete
-        </div>
-      )}
       <header className="flex shrink-0 items-center px-4 py-3 sm:px-6">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
           <BackToToolsButton onClick={onClose} toolName="Image Tools" />

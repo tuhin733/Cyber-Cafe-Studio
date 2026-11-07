@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   ChevronDown,
   FileText,
+  FileStack,
   Github,
   Heart,
   Image,
@@ -50,6 +51,7 @@ const PhotoBackgroundRemover = lazy(
   () => import("./components/PhotoBackgroundRemover"),
 );
 const ImageTools = lazy(() => import("./components/ImageTools"));
+const PdfTools = lazy(() => import("./components/PdfTools"));
 
 function App() {
   const {
@@ -99,6 +101,7 @@ function App() {
   const [showPassportPhotoMaker, setShowPassportPhotoMaker] = useState(false);
   const [showPhotoBackgroundRemover, setShowPhotoBackgroundRemover] = useState(false);
   const [showImageTools, setShowImageTools] = useState(false);
+  const [showPdfTools, setShowPdfTools] = useState(false);
   const [passportPhoto, setPassportPhoto] = useState<File | null>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
@@ -123,6 +126,7 @@ function App() {
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
+    setShowPdfTools(false);
   };
 
   const openPassportPhotoMaker = () => {
@@ -130,6 +134,7 @@ function App() {
     setShowPassportPhotoMaker(true);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
+    setShowPdfTools(false);
   };
 
   const openBackgroundRemover = () => {
@@ -137,6 +142,7 @@ function App() {
     setShowPhotoBackgroundRemover(true);
     setShowPassportPhotoMaker(false);
     setShowImageTools(false);
+    setShowPdfTools(false);
   };
 
   const openImageTools = () => {
@@ -144,6 +150,15 @@ function App() {
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(true);
+    setShowPdfTools(false);
+  };
+
+  const openPdfTools = () => {
+    setIsHomeScreen(false);
+    setShowPassportPhotoMaker(false);
+    setShowPhotoBackgroundRemover(false);
+    setShowImageTools(false);
+    setShowPdfTools(true);
   };
 
   const returnToHome = () => {
@@ -151,6 +166,7 @@ function App() {
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
+    setShowPdfTools(false);
   };
 
   useEffect(() => {
@@ -429,7 +445,8 @@ function App() {
                     !showImageTools) ||
                   showPassportPhotoMaker ||
                   showPhotoBackgroundRemover ||
-                  showImageTools
+                  showImageTools ||
+                  showPdfTools
                     ? "bg-action-emphasis text-ink-inverse"
                     : "bg-action-subtle text-action hover:bg-action-soft"
                 }`}
@@ -457,7 +474,8 @@ function App() {
                       !isHomeScreen &&
                       !showPassportPhotoMaker &&
                       !showPhotoBackgroundRemover &&
-                      !showImageTools
+                      !showImageTools &&
+                      !showPdfTools
                         ? "page"
                         : undefined
                     }
@@ -499,6 +517,31 @@ function App() {
                       </span>
                     </span>
                   </button>
+                  <div className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+                    PDF
+                  </div>
+                  <button
+                    type="button"
+                    aria-current={showPdfTools ? "page" : undefined}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
+                    onClick={() => {
+                      openPdfTools();
+                      setShowToolsMenu(false);
+                    }}
+                  >
+                    <FileStack className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-semibold text-ink-primary">
+                        PDF Tools
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-ink-muted">
+                        Merge, convert, edit, and protect PDFs
+                      </span>
+                    </span>
+                  </button>
+                  <div className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+                    Photo &amp; identity
+                  </div>
                   <button
                     type="button"
                     aria-current={showPassportPhotoMaker ? "page" : undefined}
@@ -630,6 +673,7 @@ function App() {
             onOpenPassportPhotoMaker={openPassportPhotoMaker}
             onOpenBackgroundRemover={openBackgroundRemover}
             onOpenImageTools={openImageTools}
+            onOpenPdfTools={openPdfTools}
           />
         ) : showPassportPhotoMaker ? (
           <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -656,6 +700,16 @@ function App() {
             }
           >
             <ImageTools onClose={returnToHome} />
+          </Suspense>
+        ) : showPdfTools ? (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center bg-surface-muted text-sm font-medium text-ink-muted">
+                Loading PDF Tools…
+              </div>
+            }
+          >
+            <PdfTools onClose={returnToHome} />
           </Suspense>
         ) : showPhotoBackgroundRemover ? (
           <Suspense

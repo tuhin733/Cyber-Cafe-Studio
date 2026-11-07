@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   ArrowRight,
   FileText,
+  FileStack,
   Image,
   ImageMinus,
   Rocket,
@@ -14,6 +15,7 @@ interface Props {
   onOpenPassportPhotoMaker: () => void;
   onOpenBackgroundRemover: () => void;
   onOpenImageTools: () => void;
+  onOpenPdfTools: () => void;
 }
 
 const tools = [
@@ -39,6 +41,13 @@ const tools = [
     Icon: Image,
   },
   {
+    id: "pdf-tools",
+    title: "PDF Tools",
+    description: "Merge, split, compress, convert, and organize PDF files.",
+    action: "Open PDF tools",
+    Icon: FileStack,
+  },
+  {
     id: "background",
     title: "Background Remover",
     description: "Remove or replace the background in a portrait.",
@@ -52,6 +61,7 @@ export default function ToolHome({
   onOpenPassportPhotoMaker,
   onOpenBackgroundRemover,
   onOpenImageTools,
+  onOpenPdfTools,
 }: Props) {
   const [query, setQuery] = useState("");
   const visibleTools = useMemo(() => {
@@ -67,6 +77,7 @@ export default function ToolHome({
     if (toolId === "passport") onOpenPassportPhotoMaker();
     if (toolId === "background") onOpenBackgroundRemover();
     if (toolId === "image-tools") onOpenImageTools();
+    if (toolId === "pdf-tools") onOpenPdfTools();
   };
 
   return (
@@ -96,7 +107,7 @@ export default function ToolHome({
             Everything your cyber cafe needs.
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-ink-secondary sm:text-base sm:leading-7">
-            Prepare documents, create passport and ID photos, and edit images—all in one easy-to-use workspace.
+            Prepare documents, create passport and ID photos, and edit images and PDFs—all in one easy-to-use workspace.
           </p>
 
           <label className="mx-auto mt-7 flex max-w-2xl items-center gap-3 rounded-2xl border border-ui bg-surface px-5 py-4 text-left shadow-sm transition duration-200 focus-within:border-action focus-within:shadow-md focus-within:shadow-action/10 focus-within:ring-4 focus-within:ring-action-subtle/70">
@@ -106,7 +117,7 @@ export default function ToolHome({
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search documents, photos, and image tools..."
+              placeholder="Search documents, photos, image tools, and PDFs..."
               className="w-full bg-transparent text-sm text-ink-primary outline-none placeholder:text-ink-muted sm:text-base"
             />
           </label>
@@ -124,7 +135,7 @@ export default function ToolHome({
               {visibleTools.length}
             </span>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visibleTools.map(({ id, title, description, action, Icon }) => (
               <button
                 key={id}
