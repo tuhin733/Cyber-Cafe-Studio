@@ -19,7 +19,6 @@
 - **Passport Photo Maker:** Create passport and ID photo sheets with configurable sizes and print layouts.
 - **Image Tools:** Crop, resize, compress, and convert photos and signatures.
 - **Background Remover:** Remove portrait backgrounds and choose a replacement.
-- **Desktop tools:** Print, scan documents, save PDFs, and continue working with autosaved sessions.
 
 ## Get started
 
