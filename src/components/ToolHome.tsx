@@ -12,6 +12,7 @@ import {
 
 interface Props {
   onOpenDocumentEditor: () => void;
+  onOpenDocumentMaker: () => void;
   onOpenPassportPhotoMaker: () => void;
   onOpenBackgroundRemover: () => void;
   onOpenImageTools: () => void;
@@ -24,6 +25,13 @@ const tools = [
     title: "Doc Stitch",
     description: "Arrange, resize, and print documents on A4 pages.",
     action: "Open editor",
+    Icon: FileText,
+  },
+  {
+    id: "document-maker",
+    title: "Document Maker",
+    description: "Write and format documents in English, Bangla, and Hindi.",
+    action: "Start writing",
     Icon: FileText,
   },
   {
@@ -58,6 +66,7 @@ const tools = [
 
 export default function ToolHome({
   onOpenDocumentEditor,
+  onOpenDocumentMaker,
   onOpenPassportPhotoMaker,
   onOpenBackgroundRemover,
   onOpenImageTools,
@@ -74,6 +83,7 @@ export default function ToolHome({
 
   const openTool = (toolId: (typeof tools)[number]["id"]) => {
     if (toolId === "documents") onOpenDocumentEditor();
+    if (toolId === "document-maker") onOpenDocumentMaker();
     if (toolId === "passport") onOpenPassportPhotoMaker();
     if (toolId === "background") onOpenBackgroundRemover();
     if (toolId === "image-tools") onOpenImageTools();

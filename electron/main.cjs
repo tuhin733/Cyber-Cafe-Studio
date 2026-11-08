@@ -63,6 +63,28 @@ ipcMain.handle("dialog:save-pdf", async (event, bytes, filename) => {
   return { canceled: false };
 });
 
+ipcMain.handle("dialog:save-docx", async (event, bytes, filename) => {
+  if (!isTrustedSender(event)) throw new Error("Untrusted DOCX save request");
+  if (!(bytes instanceof Uint8Array)) throw new TypeError("DOCX data must be bytes");
+  if (bytes.byteLength < 1 || bytes.byteLength > 100 * 1024 * 1024) {
+    throw new RangeError("DOCX data must be smaller than 100 MB");
+  }
+  if (typeof filename !== "string" || !/\.docx$/i.test(filename)) {
+    throw new TypeError("A DOCX filename is required");
+  }
+
+  const safeFilename = path.basename(filename);
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: "Save Word document",
+    defaultPath: safeFilename,
+    filters: [{ name: "Word documents", extensions: ["docx"] }],
+  });
+  if (canceled || !filePath) return { canceled: true };
+
+  await fs.writeFile(filePath, Buffer.from(bytes));
+  return { canceled: false };
+});
+
 function validatePhotoSheetOptions(options, includePrinterOptions = false) {
   if (!options || typeof options !== "object" || Array.isArray(options)) {
     throw new TypeError("Invalid photo sheet options");
@@ -305,6 +327,49 @@ ipcMain.handle("printer:list", async (event) => {
     console.error("Unable to list installed printers", error);
     throw new Error("Windows could not list installed printers. Check the Windows print spooler and try again.");
   }
+});
+
+ipcMain.handle("fonts:list-installed", async (event) => {
+  if (!isTrustedSender(event)) throw new Error("Untrusted installed font list request");
+  if (process.platform !== "win32") {
+    throw new Error("Installed system font scanning is only available on Windows.");
+  }
+
+  const registryKeys = [
+    "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+    "HKCU\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts",
+  ];
+  const families = new Set();
+  for (const registryKey of registryKeys) {
+    try {
+      const { stdout } = await execFileAsync(
+        "reg.exe",
+        ["query", registryKey, "/s"],
+        { windowsHide: true, maxBuffer: 1024 * 1024 },
+      );
+      for (const line of stdout.split(/\r?\n/)) {
+        const valueStart = line.search(/\s+REG_(?:SZ|EXPAND_SZ)\s+/);
+        if (valueStart < 0) continue;
+        const family = line
+          .slice(0, valueStart)
+          .trim()
+          .replace(/\s+\((?:TrueType|OpenType|Type 1)\)$/i, "");
+        if (family) families.add(family);
+      }
+    } catch (error) {
+      const missingRegistryKey =
+        error &&
+        typeof error === "object" &&
+        "stderr" in error &&
+        String(error.stderr).toLowerCase().includes("unable to find");
+      if (!missingRegistryKey) {
+        console.error(`Unable to query installed fonts from ${registryKey}`, error);
+        throw new Error("Windows could not list installed fonts.");
+      }
+    }
+  }
+
+  return [...families].sort((a, b) => a.localeCompare(b));
 });
 
 ipcMain.handle("photo:print-sheet", async (event, options) => {

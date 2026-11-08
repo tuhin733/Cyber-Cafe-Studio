@@ -1,8 +1,11 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("desktopAPI", {
+  getInstalledFonts: () => ipcRenderer.invoke("fonts:list-installed"),
   savePdf: (bytes, filename) =>
     ipcRenderer.invoke("dialog:save-pdf", bytes, filename),
+  saveDocx: (bytes, filename) =>
+    ipcRenderer.invoke("dialog:save-docx", bytes, filename),
   getPrinters: () => ipcRenderer.invoke("printer:list"),
   printDocuments: (options) =>
     ipcRenderer.invoke("document:print", options),

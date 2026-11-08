@@ -2,7 +2,12 @@ declare const __APP_VERSION__: string;
 
 interface Window {
   desktopAPI?: {
+    getInstalledFonts(): Promise<string[]>;
     savePdf(
+      bytes: Uint8Array,
+      filename: string,
+    ): Promise<{ canceled: boolean }>;
+    saveDocx(
       bytes: Uint8Array,
       filename: string,
     ): Promise<{ canceled: boolean }>;
