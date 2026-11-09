@@ -99,6 +99,37 @@
   }
 }
 
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .resume-print-area,
+  .resume-print-area * {
+    visibility: visible !important;
+  }
+
+  .resume-print-area {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 16mm !important;
+    overflow: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+}
+
 .document-maker-toolbar {
   container-name: document-maker-toolbar;
   container-type: inline-size;

@@ -10,6 +10,7 @@ import {
 import {
   CheckCircle2,
   ChevronDown,
+  ClipboardList,
   FileText,
   FileStack,
   Github,
@@ -54,6 +55,8 @@ const PhotoBackgroundRemover = lazy(
 const ImageTools = lazy(() => import("./components/ImageTools"));
 const PdfTools = lazy(() => import("./components/PdfTools"));
 const DocumentMaker = lazy(() => import("./components/DocumentMaker"));
+const ApplicationMaker = lazy(() => import("./components/ApplicationMaker"));
+const ResumeMaker = lazy(() => import("./components/ResumeMaker"));
 const DesignStudio = lazy(() => import("./components/DesignStudio"));
 
 function App() {
@@ -106,6 +109,8 @@ function App() {
   const [showImageTools, setShowImageTools] = useState(false);
   const [showPdfTools, setShowPdfTools] = useState(false);
   const [showDocumentMaker, setShowDocumentMaker] = useState(false);
+  const [showApplicationMaker, setShowApplicationMaker] = useState(false);
+  const [showResumeMaker, setShowResumeMaker] = useState(false);
   const [showDesignStudio, setShowDesignStudio] = useState(false);
   const [passportPhoto, setPassportPhoto] = useState<File | null>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -130,6 +135,8 @@ function App() {
     setIsHomeScreen(false);
     setShowDesignStudio(false);
     setShowDocumentMaker(false);
+    setShowApplicationMaker(false);
+    setShowResumeMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
@@ -140,6 +147,8 @@ function App() {
     setIsHomeScreen(false);
     setShowDesignStudio(false);
     setShowDocumentMaker(false);
+    setShowApplicationMaker(false);
+    setShowResumeMaker(false);
     setShowPassportPhotoMaker(true);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
@@ -150,6 +159,8 @@ function App() {
     setIsHomeScreen(false);
     setShowDesignStudio(false);
     setShowDocumentMaker(false);
+    setShowApplicationMaker(false);
+    setShowResumeMaker(false);
     setShowPhotoBackgroundRemover(true);
     setShowPassportPhotoMaker(false);
     setShowImageTools(false);
@@ -160,6 +171,8 @@ function App() {
     setIsHomeScreen(false);
     setShowDesignStudio(false);
     setShowDocumentMaker(false);
+    setShowApplicationMaker(false);
+    setShowResumeMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(true);
@@ -170,6 +183,8 @@ function App() {
     setIsHomeScreen(false);
     setShowDesignStudio(false);
     setShowDocumentMaker(false);
+    setShowApplicationMaker(false);
+    setShowResumeMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
@@ -179,7 +194,33 @@ function App() {
   const openDocumentMaker = () => {
     setIsHomeScreen(false);
     setShowDesignStudio(false);
+    setShowApplicationMaker(false);
+    setShowResumeMaker(false);
     setShowDocumentMaker(true);
+    setShowPassportPhotoMaker(false);
+    setShowPhotoBackgroundRemover(false);
+    setShowImageTools(false);
+    setShowPdfTools(false);
+  };
+
+  const openApplicationMaker = () => {
+    setIsHomeScreen(false);
+    setShowDesignStudio(false);
+    setShowDocumentMaker(false);
+    setShowApplicationMaker(true);
+    setShowResumeMaker(false);
+    setShowPassportPhotoMaker(false);
+    setShowPhotoBackgroundRemover(false);
+    setShowImageTools(false);
+    setShowPdfTools(false);
+  };
+
+  const openResumeMaker = () => {
+    setIsHomeScreen(false);
+    setShowDesignStudio(false);
+    setShowDocumentMaker(false);
+    setShowApplicationMaker(false);
+    setShowResumeMaker(true);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
@@ -190,6 +231,8 @@ function App() {
     setIsHomeScreen(false);
     setShowDesignStudio(true);
     setShowDocumentMaker(false);
+    setShowApplicationMaker(false);
+    setShowResumeMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
@@ -200,6 +243,8 @@ function App() {
     setIsHomeScreen(true);
     setShowDesignStudio(false);
     setShowDocumentMaker(false);
+    setShowApplicationMaker(false);
+    setShowResumeMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
@@ -438,6 +483,8 @@ function App() {
       if (
         isHomeScreen ||
         showDocumentMaker ||
+        showApplicationMaker ||
+        showResumeMaker ||
         showDesignStudio ||
         !(event.ctrlKey || event.metaKey)
       ) return;
@@ -452,7 +499,14 @@ function App() {
 
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [handleExport, isHomeScreen, showDocumentMaker, showDesignStudio]);
+  }, [
+    handleExport,
+    isHomeScreen,
+    showDocumentMaker,
+    showApplicationMaker,
+    showResumeMaker,
+    showDesignStudio,
+  ]);
 
   return (
     <>
@@ -483,6 +537,8 @@ function App() {
                   showToolsMenu ||
                   (!isHomeScreen &&
                     !showDocumentMaker &&
+                    !showApplicationMaker &&
+                    !showResumeMaker &&
                     !showDesignStudio &&
                     !showPassportPhotoMaker &&
                     !showPhotoBackgroundRemover &&
@@ -492,6 +548,8 @@ function App() {
                   showImageTools ||
                   showPdfTools ||
                   showDocumentMaker ||
+                  showApplicationMaker ||
+                  showResumeMaker ||
                   showDesignStudio
                     ? "bg-action-emphasis text-ink-inverse"
                     : "bg-action-subtle text-action hover:bg-action-soft"
@@ -519,6 +577,8 @@ function App() {
                     aria-current={
                       !isHomeScreen &&
                       !showDocumentMaker &&
+                      !showApplicationMaker &&
+                      !showResumeMaker &&
                       !showDesignStudio &&
                       !showPassportPhotoMaker &&
                       !showPhotoBackgroundRemover &&
@@ -559,6 +619,44 @@ function App() {
                       </span>
                       <span className="mt-0.5 block text-[11px] text-ink-muted">
                         Write in English, Bangla, and Hindi
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-current={showApplicationMaker ? "page" : undefined}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
+                    onClick={() => {
+                      openApplicationMaker();
+                      setShowToolsMenu(false);
+                    }}
+                  >
+                    <ClipboardList className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-semibold text-ink-primary">
+                        Application Maker
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-ink-muted">
+                        Create formal applications in three languages
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-current={showResumeMaker ? "page" : undefined}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
+                    onClick={() => {
+                      openResumeMaker();
+                      setShowToolsMenu(false);
+                    }}
+                  >
+                    <FileText className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-semibold text-ink-primary">
+                        Resume Maker
+                      </span>
+                      <span className="mt-0.5 block text-[11px] text-ink-muted">
+                        Create a resume from ready-made layouts
                       </span>
                     </span>
                   </button>
@@ -755,6 +853,8 @@ function App() {
           <ToolHome
             onOpenDocumentEditor={openDocumentEditor}
             onOpenDocumentMaker={openDocumentMaker}
+            onOpenApplicationMaker={openApplicationMaker}
+            onOpenResumeMaker={openResumeMaker}
             onOpenPassportPhotoMaker={openPassportPhotoMaker}
             onOpenBackgroundRemover={openBackgroundRemover}
             onOpenImageTools={openImageTools}
@@ -780,6 +880,26 @@ function App() {
             }
           >
             <DocumentMaker onClose={returnToHome} />
+          </Suspense>
+        ) : showApplicationMaker ? (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center bg-surface-muted text-sm font-medium text-ink-muted">
+                Loading Application Maker…
+              </div>
+            }
+          >
+            <ApplicationMaker onClose={returnToHome} />
+          </Suspense>
+        ) : showResumeMaker ? (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center bg-surface-muted text-sm font-medium text-ink-muted">
+                Loading Resume Maker…
+              </div>
+            }
+          >
+            <ResumeMaker onClose={returnToHome} />
           </Suspense>
         ) : showPassportPhotoMaker ? (
           <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">

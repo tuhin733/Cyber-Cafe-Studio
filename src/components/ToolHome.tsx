@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   ArrowRight,
+  ClipboardList,
   FileText,
   FileStack,
   Image,
@@ -14,6 +15,8 @@ import {
 interface Props {
   onOpenDocumentEditor: () => void;
   onOpenDocumentMaker: () => void;
+  onOpenApplicationMaker: () => void;
+  onOpenResumeMaker: () => void;
   onOpenPassportPhotoMaker: () => void;
   onOpenBackgroundRemover: () => void;
   onOpenImageTools: () => void;
@@ -34,6 +37,20 @@ const tools = [
     title: "Document Maker",
     description: "Write and format documents in English, Bangla, and Hindi.",
     action: "Start writing",
+    Icon: FileText,
+  },
+  {
+    id: "application-maker",
+    title: "Application Maker",
+    description: "Create school, workplace, bank, government, and personal applications in English, Bangla, or Hindi.",
+    action: "Create an application",
+    Icon: ClipboardList,
+  },
+  {
+    id: "resume-maker",
+    title: "Resume Maker",
+    description: "Build a polished resume with classic, modern, or minimal templates.",
+    action: "Create a resume",
     Icon: FileText,
   },
   {
@@ -76,6 +93,8 @@ const tools = [
 export default function ToolHome({
   onOpenDocumentEditor,
   onOpenDocumentMaker,
+  onOpenApplicationMaker,
+  onOpenResumeMaker,
   onOpenPassportPhotoMaker,
   onOpenBackgroundRemover,
   onOpenImageTools,
@@ -94,6 +113,8 @@ export default function ToolHome({
   const openTool = (toolId: (typeof tools)[number]["id"]) => {
     if (toolId === "documents") onOpenDocumentEditor();
     if (toolId === "document-maker") onOpenDocumentMaker();
+    if (toolId === "application-maker") onOpenApplicationMaker();
+    if (toolId === "resume-maker") onOpenResumeMaker();
     if (toolId === "passport") onOpenPassportPhotoMaker();
     if (toolId === "background") onOpenBackgroundRemover();
     if (toolId === "image-tools") onOpenImageTools();
