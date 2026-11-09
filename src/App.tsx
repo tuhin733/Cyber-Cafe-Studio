@@ -18,6 +18,7 @@ import {
   ImageMinus,
   Minus,
   Newspaper,
+  PenTool,
   Square,
   SquareUserRound,
   Copy,
@@ -53,6 +54,7 @@ const PhotoBackgroundRemover = lazy(
 const ImageTools = lazy(() => import("./components/ImageTools"));
 const PdfTools = lazy(() => import("./components/PdfTools"));
 const DocumentMaker = lazy(() => import("./components/DocumentMaker"));
+const DesignStudio = lazy(() => import("./components/DesignStudio"));
 
 function App() {
   const {
@@ -104,6 +106,7 @@ function App() {
   const [showImageTools, setShowImageTools] = useState(false);
   const [showPdfTools, setShowPdfTools] = useState(false);
   const [showDocumentMaker, setShowDocumentMaker] = useState(false);
+  const [showDesignStudio, setShowDesignStudio] = useState(false);
   const [passportPhoto, setPassportPhoto] = useState<File | null>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
@@ -125,6 +128,7 @@ function App() {
 
   const openDocumentEditor = () => {
     setIsHomeScreen(false);
+    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
@@ -134,6 +138,7 @@ function App() {
 
   const openPassportPhotoMaker = () => {
     setIsHomeScreen(false);
+    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowPassportPhotoMaker(true);
     setShowPhotoBackgroundRemover(false);
@@ -143,6 +148,7 @@ function App() {
 
   const openBackgroundRemover = () => {
     setIsHomeScreen(false);
+    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowPhotoBackgroundRemover(true);
     setShowPassportPhotoMaker(false);
@@ -152,6 +158,7 @@ function App() {
 
   const openImageTools = () => {
     setIsHomeScreen(false);
+    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
@@ -161,6 +168,7 @@ function App() {
 
   const openPdfTools = () => {
     setIsHomeScreen(false);
+    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
@@ -170,7 +178,18 @@ function App() {
 
   const openDocumentMaker = () => {
     setIsHomeScreen(false);
+    setShowDesignStudio(false);
     setShowDocumentMaker(true);
+    setShowPassportPhotoMaker(false);
+    setShowPhotoBackgroundRemover(false);
+    setShowImageTools(false);
+    setShowPdfTools(false);
+  };
+
+  const openDesignStudio = () => {
+    setIsHomeScreen(false);
+    setShowDesignStudio(true);
+    setShowDocumentMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
@@ -179,6 +198,7 @@ function App() {
 
   const returnToHome = () => {
     setIsHomeScreen(true);
+    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
@@ -415,7 +435,12 @@ function App() {
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
-      if (isHomeScreen || showDocumentMaker || !(event.ctrlKey || event.metaKey)) return;
+      if (
+        isHomeScreen ||
+        showDocumentMaker ||
+        showDesignStudio ||
+        !(event.ctrlKey || event.metaKey)
+      ) return;
 
       switch (event.key.toLowerCase()) {
         case "s":
@@ -427,7 +452,7 @@ function App() {
 
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [handleExport, isHomeScreen, showDocumentMaker]);
+  }, [handleExport, isHomeScreen, showDocumentMaker, showDesignStudio]);
 
   return (
     <>
@@ -458,6 +483,7 @@ function App() {
                   showToolsMenu ||
                   (!isHomeScreen &&
                     !showDocumentMaker &&
+                    !showDesignStudio &&
                     !showPassportPhotoMaker &&
                     !showPhotoBackgroundRemover &&
                     !showImageTools) ||
@@ -465,7 +491,8 @@ function App() {
                   showPhotoBackgroundRemover ||
                   showImageTools ||
                   showPdfTools ||
-                  showDocumentMaker
+                  showDocumentMaker ||
+                  showDesignStudio
                     ? "bg-action-emphasis text-ink-inverse"
                     : "bg-action-subtle text-action hover:bg-action-soft"
                 }`}
@@ -492,6 +519,7 @@ function App() {
                     aria-current={
                       !isHomeScreen &&
                       !showDocumentMaker &&
+                      !showDesignStudio &&
                       !showPassportPhotoMaker &&
                       !showPhotoBackgroundRemover &&
                       !showImageTools &&
@@ -531,6 +559,23 @@ function App() {
                       </span>
                       <span className="mt-0.5 block text-[11px] text-ink-muted">
                         Write in English, Bangla, and Hindi
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-current={showDesignStudio ? "page" : undefined}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
+                    onClick={() => {
+                      openDesignStudio();
+                      setShowToolsMenu(false);
+                    }}
+                  >
+                    <PenTool className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-xs font-semibold text-ink-primary">Design Studio</span>
+                      <span className="mt-0.5 block text-[11px] text-ink-muted">
+                        Create social graphics and custom designs
                       </span>
                     </span>
                   </button>
@@ -714,7 +759,18 @@ function App() {
             onOpenBackgroundRemover={openBackgroundRemover}
             onOpenImageTools={openImageTools}
             onOpenPdfTools={openPdfTools}
+            onOpenDesignStudio={openDesignStudio}
           />
+        ) : showDesignStudio ? (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center bg-surface-muted text-sm font-medium text-ink-muted">
+                Loading Design Studio…
+              </div>
+            }
+          >
+            <DesignStudio onClose={returnToHome} />
+          </Suspense>
         ) : showDocumentMaker ? (
           <Suspense
             fallback={
