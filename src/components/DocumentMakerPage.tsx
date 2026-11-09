@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { createPortal } from "react-dom";
 import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { NodeSelection } from "@tiptap/pm/state";
 import { AlignCenter, AlignLeft, AlignRight, Columns2, Copy, Plus, RotateCcw, RotateCw, Trash2 } from "lucide-react";
 import { DOCUMENT_MAKER_EXTENSIONS } from "../lib/documentMakerExtensions";
 import {
@@ -18,10 +16,6 @@ import {
   type DocumentMakerPage,
   getDocumentMakerPageDimensions,
 } from "../lib/documentMaker";
-import {
-  DEFAULT_DOCUMENT_MAKER_SHAPE,
-  type DocumentMakerShapeType,
-} from "../lib/documentMakerShapes";
 
 interface Props {
   page: DocumentMakerPage;
@@ -32,7 +26,6 @@ interface Props {
   language: DocumentMakerLanguage;
   spellCheck: boolean;
   autoCorrect: boolean;
-  shapeTool: DocumentMakerShapeType | null;
   onContentChange: (pageId: string, page: DocumentMakerPage["content"]) => void;
   onAutoPage: (pageId: string, content: DocumentMakerPage["content"], activateNextPage?: boolean) => void;
   onActivate: (pageId: string) => void;
@@ -60,12 +53,6 @@ interface ImageContextMenu {
   position: number;
 }
 
-interface ShapeContextMenu {
-  left: number;
-  top: number;
-  position: number;
-}
-
 interface RowResizeState {
   row: HTMLTableRowElement;
   position: number;
@@ -80,16 +67,6 @@ interface TableDragState {
   pointerId: number;
 }
 
-interface ShapeDrawState {
-  pointerId: number;
-  shapeType: DocumentMakerShapeType;
-  startX: number;
-  startY: number;
-  currentX: number;
-  currentY: number;
-  scale: number;
-}
-
 export default function DocumentMakerPageEditor({
   page,
   pageNumber,
@@ -99,7 +76,6 @@ export default function DocumentMakerPageEditor({
   language,
   spellCheck,
   autoCorrect,
-  shapeTool,
   onContentChange,
   onAutoPage,
   onActivate,
@@ -111,22 +87,13 @@ export default function DocumentMakerPageEditor({
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const [tableContextMenu, setTableContextMenu] = useState<TableContextMenu | null>(null);
   const [imageContextMenu, setImageContextMenu] = useState<ImageContextMenu | null>(null);
-  const [shapeContextMenu, setShapeContextMenu] = useState<ShapeContextMenu | null>(null);
   const [isDraggingTable, setIsDraggingTable] = useState(false);
-  const [shapeDrawPreview, setShapeDrawPreview] = useState<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
   const tableContextMenuRef = useRef<HTMLDivElement | null>(null);
   const imageContextMenuRef = useRef<HTMLDivElement | null>(null);
-  const shapeContextMenuRef = useRef<HTMLDivElement | null>(null);
   const suggestionRef = useRef(suggestion);
   const selectedSuggestionRef = useRef(selectedSuggestion);
   const rowResizeRef = useRef<RowResizeState | null>(null);
   const tableDragRef = useRef<TableDragState | null>(null);
-  const shapeDrawRef = useRef<ShapeDrawState | null>(null);
   const acceptSuggestionRef = useRef<((appendSpace: boolean) => boolean) | null>(null);
   const isAutoPaging = useRef(false);
   suggestionRef.current = suggestion;
@@ -358,140 +325,28 @@ export default function DocumentMakerPageEditor({
   acceptSuggestionRef.current = replaceWithSuggestion;
 
   useEffect(() => {
-    if (!tableContextMenu && !imageContextMenu && !shapeContextMenu) return;
+    if (!tableContextMenu && !imageContextMenu) return;
 
     const handleOutsidePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (
         tableContextMenuRef.current?.contains(target) ||
-        imageContextMenuRef.current?.contains(target) ||
-        shapeContextMenuRef.current?.contains(target)
+        imageContextMenuRef.current?.contains(target)
       ) {
         return;
       }
       setTableContextMenu(null);
       setImageContextMenu(null);
-      setShapeContextMenu(null);
     };
 
     document.addEventListener("pointerdown", handleOutsidePointerDown);
     return () => document.removeEventListener("pointerdown", handleOutsidePointerDown);
-  }, [imageContextMenu, shapeContextMenu, tableContextMenu]);
-
-  const beginShapeDraw = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!active || !shapeTool || event.button !== 0) return;
-    const page = event.currentTarget;
-    const bounds = page.getBoundingClientRect();
-    const pageWidth = Number.parseFloat(page.style.width) || bounds.width;
-    const scale = bounds.width / pageWidth || 1;
-    const startX = Math.max(0, Math.min(pageWidth, (event.clientX - bounds.left) / scale));
-    const startY = Math.max(0, Math.min(bounds.height / scale, (event.clientY - bounds.top) / scale));
-    event.preventDefault();
-    event.stopPropagation();
-    page.setPointerCapture(event.pointerId);
-    shapeDrawRef.current = {
-      pointerId: event.pointerId,
-      shapeType: shapeTool,
-      startX,
-      startY,
-      currentX: startX,
-      currentY: startY,
-      scale,
-    };
-  };
-
-  const updateShapeDraw = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const draw = shapeDrawRef.current;
-    if (!draw || draw.pointerId !== event.pointerId) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - bounds.left) / draw.scale;
-    const y = (event.clientY - bounds.top) / draw.scale;
-    draw.currentX = Math.max(0, Math.min(bounds.width / draw.scale, x));
-    draw.currentY = Math.max(0, Math.min(bounds.height / draw.scale, y));
-    setShapeDrawPreview({
-      x: Math.min(draw.startX, draw.currentX),
-      y: Math.min(draw.startY, draw.currentY),
-      width: Math.abs(draw.currentX - draw.startX),
-      height: Math.abs(draw.currentY - draw.startY),
-    });
-  };
-
-  const finishShapeDraw = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const draw = shapeDrawRef.current;
-    if (!draw || draw.pointerId !== event.pointerId) return;
-    shapeDrawRef.current = null;
-    setShapeDrawPreview(null);
-    if (Math.hypot(draw.currentX - draw.startX, draw.currentY - draw.startY) * draw.scale < 5) {
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-      return;
-    }
-    const horizontalLine = draw.shapeType === "line" || draw.shapeType === "arrow";
-    const width = Math.max(horizontalLine ? 1 : 24, Math.abs(draw.currentX - draw.startX));
-    const height = Math.max(horizontalLine ? 1 : 24, Math.abs(draw.currentY - draw.startY));
-    const x = Math.min(draw.startX, draw.currentX);
-    const y = Math.min(draw.startY, draw.currentY);
-    if (editor) {
-      const shape = {
-        type: "documentShape",
-        attrs: {
-          ...DEFAULT_DOCUMENT_MAKER_SHAPE,
-          shapeType: draw.shapeType,
-          x,
-          y,
-          width,
-          height,
-          fill: draw.shapeType === "line" || draw.shapeType === "textBox"
-            ? "none"
-            : DEFAULT_DOCUMENT_MAKER_SHAPE.fill,
-        },
-      };
-      const selection = editor.state.selection;
-      if (selection instanceof NodeSelection) {
-        editor.chain().focus().insertContentAt(selection.to, shape).run();
-      } else {
-        editor.chain().focus().insertContent(shape).run();
-      }
-    }
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
+  }, [imageContextMenu, tableContextMenu]);
 
   const handleTableContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    const shape = target.closest(".document-maker-shape-node");
-    if (shape && editor) {
-      event.preventDefault();
-      let shapePosition: number | null = null;
-      editor.state.doc.descendants((node, position) => {
-        if (node.type.name !== "documentShape") return true;
-        const nodeDOM = editor.view.nodeDOM(position);
-        if (
-          nodeDOM instanceof HTMLElement &&
-          (nodeDOM === shape || nodeDOM.contains(shape))
-        ) {
-          shapePosition = position;
-          return false;
-        }
-        return true;
-      });
-      if (shapePosition === null) return;
-      editor.commands.setNodeSelection(shapePosition);
-      editor.view.focus();
-      setTableContextMenu(null);
-      setImageContextMenu(null);
-      setShapeContextMenu({
-        left: Math.max(8, Math.min(event.clientX, window.innerWidth - 264)),
-        top: Math.max(8, Math.min(event.clientY, window.innerHeight - 420)),
-        position: shapePosition,
-      });
-      return;
-    }
-    setShapeContextMenu(null);
     const image = target.closest("img.document-maker-image");
     if (image && editor) {
       event.preventDefault();
@@ -733,32 +588,6 @@ export default function DocumentMakerPageEditor({
     setImageContextMenu(null);
   };
 
-  const shapeContextNode = shapeContextMenu
-    ? editor?.state.doc.nodeAt(shapeContextMenu.position)
-    : null;
-  const shapeContextAttrs = shapeContextNode?.type.name === "documentShape"
-    ? shapeContextNode.attrs
-    : null;
-  const updateContextShape = (attrs: Record<string, unknown>) => {
-    if (!editor || !shapeContextMenu || !shapeContextAttrs) return;
-    editor.view.dispatch(
-      editor.state.tr.setNodeMarkup(shapeContextMenu.position, undefined, {
-        ...shapeContextAttrs,
-        ...attrs,
-      }),
-    );
-  };
-  const deleteContextShape = () => {
-    if (!editor || !shapeContextMenu || !shapeContextNode) return;
-    editor.view.dispatch(
-      editor.state.tr.delete(
-        shapeContextMenu.position,
-        shapeContextMenu.position + shapeContextNode.nodeSize,
-      ),
-    );
-    setShapeContextMenu(null);
-  };
-
   useEffect(() => {
     onEditorReady(page.id, editor);
     return () => onEditorReady(page.id, null);
@@ -813,46 +642,27 @@ export default function DocumentMakerPageEditor({
       aria-label={`Page ${pageNumber}`}
       onContextMenu={handleTableContextMenu}
       onPointerDown={(event) => {
-        if (shapeDrawRef.current) return;
         handleTableDragStart(event);
         if (!tableDragRef.current) handleRowResizeStart(event);
       }}
       onPointerMove={(event) => {
-        updateShapeDraw(event);
         handleRowResizeMove(event);
       }}
       onPointerUp={finishRowResize}
       onPointerCancel={finishRowResize}
-      onPointerDownCapture={beginShapeDraw}
       onPointerUpCapture={(event) => {
-        finishShapeDraw(event);
         finishTableDrag(event);
       }}
       onPointerCancelCapture={(event) => {
-        finishShapeDraw(event);
         finishTableDrag(event);
       }}
       style={{ ...margins, width: `${dimensions.widthPx}px`, maxWidth: "100%", aspectRatio: `${dimensions.widthPx} / ${dimensions.heightPx}` }}
       className={`document-maker-page mx-auto w-full max-w-[800px] bg-surface shadow-sm ${
         active ? "document-maker-page-active ring-1 ring-action-accent" : "ring-1 ring-ui"
-      } ${isDraggingTable ? "document-maker-table-dragging" : ""} ${
-        shapeTool ? "document-maker-shape-drawing" : ""
-      }`}
+      } ${isDraggingTable ? "document-maker-table-dragging" : ""}`}
     >
       {layout.header && (
         <div className="document-maker-page-header">{layout.header}</div>
-      )}
-      {shapeDrawPreview && (
-        <div
-          aria-hidden="true"
-          className="document-maker-shape-draw-preview"
-          style={{
-            left: shapeDrawPreview.x,
-            top: shapeDrawPreview.y,
-            width: Math.max(1, shapeDrawPreview.width),
-            height: Math.max(1, shapeDrawPreview.height),
-          }}
-        />
       )}
       <EditorContent editor={editor} />
       {(layout.footer || layout.pageNumbers) && (
@@ -913,118 +723,6 @@ export default function DocumentMakerPageEditor({
           ))}
         </div>
       )}
-      {shapeContextMenu && shapeContextAttrs && active && createPortal(
-        <div
-          ref={shapeContextMenuRef}
-          role="group"
-          aria-label="Shape options"
-          className="document-maker-shape-context fixed z-50 rounded-xl border border-ui bg-surface p-2 shadow-xl"
-          style={{ left: shapeContextMenu.left, top: shapeContextMenu.top }}
-        >
-          <label className="flex items-center justify-between gap-3 text-xs text-ink-secondary">
-            Fill
-            <select
-              aria-label="Shape fill"
-              value={shapeContextAttrs.fill}
-              onChange={(event) => updateContextShape({ fill: event.currentTarget.value })}
-              className="h-8 min-w-28 rounded-lg border border-ui bg-surface px-2 text-xs text-ink-primary"
-            >
-              <option value="none">None</option>
-              <option value="#DBEAFE">Blue</option>
-              <option value="#DCFCE7">Green</option>
-              <option value="#FEF3C7">Yellow</option>
-              <option value="#FCE7F3">Pink</option>
-              <option value="#FFFFFF">White</option>
-              {!["none", "#DBEAFE", "#DCFCE7", "#FEF3C7", "#FCE7F3", "#FFFFFF"].includes(String(shapeContextAttrs.fill)) && (
-                <option value={String(shapeContextAttrs.fill)}>Custom</option>
-              )}
-            </select>
-          </label>
-          <label className="flex items-center justify-between gap-3 py-1.5 text-xs text-ink-secondary">
-            Fill color
-            <input
-              aria-label="Shape fill color"
-              type="color"
-              value={shapeContextAttrs.fill === "none" ? "#DBEAFE" : String(shapeContextAttrs.fill)}
-              onChange={(event) => updateContextShape({ fill: event.currentTarget.value })}
-              className="h-8 w-10 cursor-pointer rounded border border-ui bg-surface p-0.5"
-            />
-          </label>
-          <label className="flex items-center justify-between gap-3 py-1.5 text-xs text-ink-secondary">
-            Outline
-            <input
-              aria-label="Shape outline color"
-              type="color"
-              value={String(shapeContextAttrs.stroke)}
-              onChange={(event) => updateContextShape({ stroke: event.currentTarget.value })}
-              className="h-8 w-10 cursor-pointer rounded border border-ui bg-surface p-0.5"
-            />
-          </label>
-          <label className="flex items-center justify-between gap-3 py-1.5 text-xs text-ink-secondary">
-            Width
-            <input
-              aria-label="Shape outline thickness"
-              type="number"
-              min="1"
-              max="12"
-              value={Number(shapeContextAttrs.strokeWidth)}
-              onChange={(event) =>
-                updateContextShape({ strokeWidth: Math.max(1, Math.min(12, Number(event.currentTarget.value) || 1)) })
-              }
-              className="h-8 w-16 rounded-lg border border-ui bg-surface px-2 text-xs text-ink-primary"
-            />
-          </label>
-          <label className="flex items-center justify-between gap-3 py-1.5 text-xs text-ink-secondary">
-            Opacity
-            <input
-              aria-label="Shape opacity"
-              type="range"
-              min="0.1"
-              max="1"
-              step="0.1"
-              value={Number(shapeContextAttrs.opacity)}
-              onChange={(event) => updateContextShape({ opacity: Number(event.currentTarget.value) })}
-              className="w-24 accent-action"
-            />
-          </label>
-          <div className="my-1 border-t border-ui" />
-          <label className="flex min-h-9 items-center gap-2 rounded-lg px-1 text-sm text-ink-primary hover:bg-surface-muted">
-            <input
-              type="checkbox"
-              checked={Boolean(shapeContextAttrs.dashed)}
-              onChange={(event) => updateContextShape({ dashed: event.currentTarget.checked })}
-              className="accent-action"
-            />
-            Dashed outline
-          </label>
-          <label className="flex min-h-9 items-center gap-2 rounded-lg px-1 text-sm text-ink-primary hover:bg-surface-muted">
-            <input
-              type="checkbox"
-              checked={Boolean(shapeContextAttrs.shadow)}
-              onChange={(event) => updateContextShape({ shadow: event.currentTarget.checked })}
-              className="accent-action"
-            />
-            Shadow
-          </label>
-          <button
-            type="button"
-            onClick={() => updateContextShape({ rotation: (Number(shapeContextAttrs.rotation) + 15) % 360 })}
-            className="flex min-h-9 w-full items-center gap-2 rounded-lg px-1 text-left text-sm text-ink-primary hover:bg-surface-muted"
-          >
-            <RotateCw className="h-4 w-4" aria-hidden="true" />
-            Rotate 15°
-          </button>
-          <div className="my-1 border-t border-ui" />
-          <button
-            type="button"
-            onClick={deleteContextShape}
-            className="flex min-h-9 w-full items-center gap-2 rounded-lg px-1 text-left text-sm text-danger hover:bg-surface-muted"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-            Delete shape
-          </button>
-        </div>
-      , document.body)}
       {imageContextMenu && active && (
         <div
           ref={imageContextMenuRef}

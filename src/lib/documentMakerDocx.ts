@@ -19,16 +19,9 @@ import {
   VerticalPositionRelativeFrom,
   WidthType,
 } from "docx";
-import { ShapeRun, type PresetShapeType } from "docx/shapes";
 import type { DocumentMakerLayout, DocumentMakerPage } from "./documentMaker";
 import { getDocumentMakerPageDimensions } from "./documentMaker";
 import { DOCUMENT_MAKER_EXTENSIONS } from "./documentMakerExtensions";
-import {
-  DEFAULT_DOCUMENT_MAKER_SHAPE,
-  getDocumentMakerShapeColor,
-  isDocumentMakerShapeType,
-  type DocumentMakerShapeType,
-} from "./documentMakerShapes";
 
 type InlineNode = JSONContent;
 type BlockNode = JSONContent;
@@ -148,74 +141,12 @@ function tableFromNode(node: BlockNode): Table {
   return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } });
 }
 
-function shapeFromNode(node: BlockNode): ShapeRun {
-  const attrs = node.attrs ?? {};
-  const shapeTypes: Record<DocumentMakerShapeType, PresetShapeType> = {
-    rectangle: "rectangle",
-    roundedRectangle: "roundedRectangle",
-    ellipse: "ellipse",
-    line: "line",
-    arrow: "rightArrow",
-    triangle: "triangle",
-    callout: "rectangularCallout",
-    textBox: "rectangle",
-  };
-  const shapeType = isDocumentMakerShapeType(attrs.shapeType)
-    ? attrs.shapeType
-    : "rectangle";
-  const opacity = Math.max(0, Math.min(1, Number(attrs.opacity) || 1));
-  const normalizedFill = getDocumentMakerShapeColor(attrs.fill, DEFAULT_DOCUMENT_MAKER_SHAPE.fill);
-  const normalizedStroke = getDocumentMakerShapeColor(attrs.stroke, DEFAULT_DOCUMENT_MAKER_SHAPE.stroke);
-  const fill = normalizedFill === "none" ? "none" : normalizedFill.slice(1).toUpperCase();
-  const stroke = normalizedStroke.slice(1).toUpperCase();
-  const width = Math.max(1, Number(attrs.width) || 160);
-  const height = Math.max(1, Number(attrs.height) || 100);
-  const x = Math.max(0, Number(attrs.x) || 0);
-  const y = Math.max(0, Number(attrs.y) || 0);
-  const strokeWidth = Math.max(1, Number(attrs.strokeWidth) || 2);
-  return new ShapeRun({
-    type: shapeTypes[shapeType],
-    transformation: {
-      width,
-      height,
-      rotation: Number(attrs.rotation) || 0,
-    },
-    floating: {
-      horizontalPosition: {
-        relative: HorizontalPositionRelativeFrom.PAGE,
-        offset: Math.round(x * 9525),
-      },
-      verticalPosition: {
-        relative: VerticalPositionRelativeFrom.PAGE,
-        offset: Math.round(y * 9525),
-      },
-      wrap: { type: TextWrappingType.NONE },
-      allowOverlap: true,
-    },
-    fill: fill.toLowerCase() === "none"
-      ? "none"
-      : { color: fill, transparency: Math.round((1 - opacity) * 100) },
-    line: {
-      color: stroke,
-      width: strokeWidth * 0.75,
-      transparency: Math.round((1 - opacity) * 100),
-      dash: attrs.dashed ? "dash" : undefined,
-    },
-    effects: attrs.shadow ? { shadow: {} } : undefined,
-    text: shapeType === "textBox" && typeof attrs.text === "string" ? attrs.text : undefined,
-    textOptions: shapeType === "textBox" ? { verticalAlignment: "top" } : undefined,
-    altText: { title: shapeType, description: `${shapeType} shape` },
-  });
-}
-
 function blocksToDocx(pages: DocumentMakerPage[]) {
   return pages.flatMap((page, pageIndex) => {
     const blocks: (Paragraph | Table)[] = [];
     for (const node of page.content.content ?? []) {
       if (node.type === "pageBreak") {
         blocks.push(new Paragraph({ pageBreakBefore: true }));
-      } else if (node.type === "documentShape") {
-        blocks.push(new Paragraph({ children: [shapeFromNode(node)] }));
       } else if (node.type === "table") {
         blocks.push(tableFromNode(node));
       } else if (node.type === "bulletList" || node.type === "orderedList") {

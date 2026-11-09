@@ -11,6 +11,7 @@ import {
   getDocumentMakerSuggestions,
   insertDocumentMakerPage,
   moveDocumentMakerPage,
+  removeLegacyDocumentShapes,
   splitDocumentMakerContentAtPageBreak,
   splitDocumentMakerTableAtRow,
 } from "./documentMaker";
@@ -33,6 +34,28 @@ describe("document maker typing helpers", () => {
       from: 10,
       to: 14,
     });
+  });
+
+  it("removes legacy shapes while preserving text-box content", () => {
+    const normalized = removeLegacyDocumentShapes({
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "Before" }] },
+        { type: "documentShape", attrs: { shapeType: "rectangle" } },
+        { type: "documentShape", attrs: { shapeType: "textBox", text: "Editable note" } },
+        {
+          type: "blockquote",
+          content: [{
+            type: "documentShape",
+            attrs: { shapeType: "textBox", text: "Nested note" },
+          }],
+        },
+      ],
+    });
+
+    expect(
+      generateText(normalized, DOCUMENT_MAKER_EXTENSIONS).replace(/\s+/g, " ").trim(),
+    ).toBe("Before Editable note Nested note");
   });
 
   it("does not offer transliteration candidates in English mode", () => {
@@ -225,29 +248,6 @@ describe("document maker typing helpers", () => {
               },
             ],
           },
-          {
-            type: "documentShape",
-            attrs: {
-              shapeType: "roundedRectangle",
-              x: 120,
-              y: 80,
-              width: 180,
-              height: 90,
-              fill: "#DCFCE7",
-              stroke: "#15803D",
-            },
-          },
-          {
-            type: "documentShape",
-            attrs: {
-              shapeType: "textBox",
-              x: 320,
-              y: 80,
-              width: 180,
-              height: 90,
-              text: "Editable note",
-            },
-          },
         ],
       },
       DOCUMENT_MAKER_EXTENSIONS,
@@ -265,8 +265,7 @@ describe("document maker typing helpers", () => {
     expect(html).toContain("<table");
     expect(html).toContain('data-row-height="40"');
     expect(html).toContain("<th>");
-    expect(html).toContain('data-shape-type="roundedRectangle"');
-    expect(html).toContain("Editable note");
+    expect(html).not.toContain("document-maker-shape");
   });
 
   it("derives a safe font family name from an uploaded font filename", () => {
@@ -290,30 +289,6 @@ describe("document maker typing helpers", () => {
             height: 48,
             x: 120,
             y: 180,
-          },
-        },
-        {
-          type: "documentShape",
-          attrs: {
-            shapeType: "ellipse",
-            x: 120,
-            y: 80,
-            width: 180,
-            height: 90,
-            fill: "#DBEAFE",
-            stroke: "#2563EB",
-          },
-        },
-        {
-          type: "documentShape",
-          attrs: {
-            shapeType: "textBox",
-            x: 320,
-            y: 80,
-            width: 180,
-            height: 90,
-            fill: "none",
-            text: "Editable note",
           },
         },
       ],
@@ -352,16 +327,6 @@ describe("document maker typing helpers", () => {
                 content: [{ type: "text", text: "First list item" }],
               }],
             }],
-          },
-          {
-            type: "documentShape",
-            attrs: {
-              shapeType: "triangle",
-              x: 60,
-              y: 120,
-              width: 120,
-              height: 110,
-            },
           },
         ],
       });

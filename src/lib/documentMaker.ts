@@ -59,6 +59,26 @@ export interface DocumentMakerPage {
   content: JSONContent;
 }
 
+export function removeLegacyDocumentShapes(content: JSONContent): JSONContent {
+  const cleanNodes = (nodes: JSONContent[] = []): JSONContent[] =>
+    nodes.flatMap((node) => {
+      if (node.type === "documentShape") {
+        const text = typeof node.attrs?.text === "string" ? node.attrs.text : "";
+        return text ? [{ type: "paragraph", content: [{ type: "text", text }] }] : [];
+      }
+      return [{
+        ...node,
+        ...(node.content ? { content: cleanNodes(node.content) } : {}),
+      }];
+    });
+
+  const nextContent = { ...content, content: cleanNodes(content.content) };
+  if (nextContent.type === "doc" && nextContent.content.length === 0) {
+    nextContent.content.push({ type: "paragraph" });
+  }
+  return nextContent;
+}
+
 export function splitDocumentMakerTableAtRow(
   doc: ProseMirrorNode,
   blockIndex: number,

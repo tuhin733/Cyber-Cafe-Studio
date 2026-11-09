@@ -7,13 +7,11 @@ import {
   AlignJustify,
   AlignLeft,
   AlignRight,
-  ArrowRight,
   ArrowDown,
   ArrowUp,
   Bold,
   Check,
   Copy,
-  Circle,
   Download,
   Highlighter,
   ImagePlus,
@@ -22,17 +20,13 @@ import {
   List,
   ListOrdered,
   Minus,
-  MessageSquare,
   MoreVertical,
   Pipette,
   Plus,
   RotateCcw,
   Search,
-  Shapes,
   Settings2,
-  Square,
   Table2,
-  Triangle,
   Redo2,
   ChevronDown,
   SpellCheck,
@@ -41,7 +35,6 @@ import {
   Undo2,
   Upload,
   WandSparkles,
-  Type,
 } from "lucide-react";
 import BackToToolsButton from "./BackToToolsButton";
 import DocumentMakerPageEditor from "./DocumentMakerPage";
@@ -65,6 +58,7 @@ import {
   getDocumentMakerPageDimensions,
   insertDocumentMakerPage,
   moveDocumentMakerPage,
+  removeLegacyDocumentShapes,
   type DocumentMakerLanguage,
   type DocumentMakerLayout,
   type DocumentMakerPage,
@@ -91,12 +85,6 @@ import {
 import { DOCUMENT_MAKER_TEMPLATES, type DocumentMakerTemplate } from "../lib/documentMakerTemplates";
 import { useToolAutoSave } from "../hooks/useToolAutoSave";
 import { downloadBlob, savePDF } from "../lib/pdf";
-import {
-  getDocumentMakerShapeLabel,
-  DOCUMENT_MAKER_SHAPE_TYPES,
-  type DocumentMakerShapeType,
-} from "../lib/documentMakerShapes";
-
 interface Props {
   onClose: () => void;
 }
@@ -687,32 +675,18 @@ function ToolbarDropdown({
 }
 
 function getPagePreview(page: DocumentMakerPage) {
-  const text = generateText(page.content, DOCUMENT_MAKER_EXTENSIONS, {
+  const text = generateText(removeLegacyDocumentShapes(page.content), DOCUMENT_MAKER_EXTENSIONS, {
     blockSeparator: " ",
   })
     .replace(/\s+/g, " ")
     .trim();
-  if (text) return text;
-  let shapePreview = "";
-  page.content.content?.some((node) => {
-    if (node.type !== "documentShape") return false;
-    const shapeType = typeof node.attrs?.shapeType === "string" &&
-      DOCUMENT_MAKER_SHAPE_TYPES.includes(node.attrs.shapeType as DocumentMakerShapeType)
-      ? node.attrs.shapeType as DocumentMakerShapeType
-      : "rectangle";
-    const text = shapeType === "textBox" && typeof node.attrs?.text === "string"
-      ? node.attrs.text.trim()
-      : "";
-    shapePreview = text || getDocumentMakerShapeLabel(shapeType);
-    return true;
-  });
-  return shapePreview;
+  return text;
 }
 
 function hasDocumentContent(page: DocumentMakerPage) {
   const containsContent = (node: DocumentMakerPage["content"]): boolean => {
     if (node.text?.trim()) return true;
-    if (node.type === "image" || node.type === "documentShape") return true;
+    if (node.type === "image") return true;
     return node.content?.some((child) =>
       containsContent(child as DocumentMakerPage["content"]),
     ) ?? false;
@@ -773,11 +747,10 @@ export default function DocumentMaker({ onClose }: Props) {
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
   const [tableColumns, setTableColumns] = useState(3);
   const [tableRows, setTableRows] = useState(3);
-  const [shapeTool, setShapeTool] = useState<DocumentMakerShapeType | null>(null);
   const [textColor, setTextColor] = useState("#000000");
   const [tablePickerPosition, setTablePickerPosition] = useState<{ left: number; top: number } | null>(null);
   const [openToolbarMenu, setOpenToolbarMenu] = useState<
-    "alignment" | "list" | "proofing" | "more" | "shapes" | null
+    "alignment" | "list" | "proofing" | "more" | null
   >(null);
   const editorByPage = useRef(new Map<string, Editor>());
   const activePageIdRef = useRef(activePageId);
@@ -815,13 +788,17 @@ export default function DocumentMaker({ onClose }: Props) {
     }
     setCurrentDocumentId(saved.id);
     setDocumentTitle(saved.title);
-    setPages(saved.pages);
+    const restoredPages = saved.pages.map((page) => ({
+      ...page,
+      content: removeLegacyDocumentShapes(page.content),
+    }));
+    setPages(restoredPages);
     setLayout(saved.layout);
     setLanguage(saved.language);
     setSpellCheck(saved.spellCheck);
     setAutoCorrect(saved.autoCorrect);
-    activePageIdRef.current = saved.pages[0].id;
-    setActivePageId(saved.pages[0].id);
+    activePageIdRef.current = restoredPages[0].id;
+    setActivePageId(restoredPages[0].id);
     setAutoFocusPageId(null);
     setActiveEditor(null);
   }, []);
@@ -1086,12 +1063,16 @@ export default function DocumentMaker({ onClose }: Props) {
 
   const openSavedDocument = async (saved: SavedDocumentMakerDocument) => {
     if (saved.id !== currentDocumentId && !(await preserveCurrentDocument())) return;
+    const restoredPages = saved.pages.map((page) => ({
+      ...page,
+      content: removeLegacyDocumentShapes(page.content),
+    }));
     setCurrentDocumentId(saved.id);
     setDocumentTitle(saved.title);
-    setPages(saved.pages);
+    setPages(restoredPages);
     setLayout(saved.layout);
-    activePageIdRef.current = saved.pages[0].id;
-    setActivePageId(saved.pages[0].id);
+    activePageIdRef.current = restoredPages[0].id;
+    setActivePageId(restoredPages[0].id);
     setActiveEditor(null);
     setAutoFocusPageId(null);
     setLibraryOpen(false);
@@ -1382,15 +1363,6 @@ export default function DocumentMaker({ onClose }: Props) {
     return () => window.removeEventListener("keydown", handleDocumentShortcut);
   }, [saveCurrentDocument]);
 
-  useEffect(() => {
-    if (!shapeTool) return;
-    const handleCancelDrawing = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShapeTool(null);
-    };
-    window.addEventListener("keydown", handleCancelDrawing);
-    return () => window.removeEventListener("keydown", handleCancelDrawing);
-  }, [shapeTool]);
-
   const insertImage = async (file?: File) => {
     if (!file || !activeEditor) return;
     if (!file.type.startsWith("image/")) {
@@ -1642,27 +1614,6 @@ export default function DocumentMaker({ onClose }: Props) {
     if (nextSize) applyFontSize(nextSize);
   };
   const currentFontFamily = activeEditor?.getAttributes("textStyle").fontFamily ?? "";
-  const shapeToolbarItems = DOCUMENT_MAKER_SHAPE_TYPES.map((shapeType) => {
-    const icons = {
-      rectangle: <Square className="h-4 w-4" aria-hidden="true" />,
-      roundedRectangle: <Square className="h-4 w-4 rounded-md" aria-hidden="true" />,
-      ellipse: <Circle className="h-4 w-4" aria-hidden="true" />,
-      line: <Minus className="h-4 w-4" aria-hidden="true" />,
-      arrow: <ArrowRight className="h-4 w-4" aria-hidden="true" />,
-      triangle: <Triangle className="h-4 w-4" aria-hidden="true" />,
-      callout: <MessageSquare className="h-4 w-4" aria-hidden="true" />,
-      textBox: <Type className="h-4 w-4" aria-hidden="true" />,
-    };
-    return {
-      label: getDocumentMakerShapeLabel(shapeType),
-      icon: icons[shapeType],
-      active: shapeTool === shapeType,
-      disabled: !activeEditor,
-      onSelect: () => {
-        if (activeEditor) setShapeTool((current) => current === shapeType ? null : shapeType);
-      },
-    };
-  });
   const languageFonts = [
     ...new Set([
       ...LANGUAGE_FONT_FAMILIES[language],
@@ -2181,18 +2132,6 @@ export default function DocumentMaker({ onClose }: Props) {
             >
               <ImagePlus className="h-4 w-4" aria-hidden="true" />
             </ToolbarButton>
-            <ToolbarDropdown
-              label="Shape tool"
-              icon={<Shapes className="h-4 w-4" aria-hidden="true" />}
-              open={openToolbarMenu === "shapes"}
-              active={shapeTool !== null}
-              disabled={!activeEditor}
-              onToggle={() =>
-                setOpenToolbarMenu((current) => current === "shapes" ? null : "shapes")
-              }
-              onClose={() => setOpenToolbarMenu(null)}
-              items={shapeToolbarItems}
-            />
             <div ref={tablePickerAnchorRef} className="relative">
               <ToolbarButton
                 label="Insert table"
@@ -2463,7 +2402,6 @@ export default function DocumentMaker({ onClose }: Props) {
                   language={language}
                   spellCheck={spellCheck}
                   autoCorrect={autoCorrect}
-                  shapeTool={shapeTool}
                   onContentChange={handlePageContentChange}
                   onAutoPage={handleAutoPage}
                   onActivate={activatePage}
