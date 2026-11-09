@@ -7,13 +7,14 @@ import {
   AlignJustify,
   AlignLeft,
   AlignRight,
+  ArrowRight,
   ArrowDown,
   ArrowUp,
   Bold,
   Check,
   Copy,
+  Circle,
   Download,
-  FilePlus2,
   Highlighter,
   ImagePlus,
   Italic,
@@ -21,22 +22,26 @@ import {
   List,
   ListOrdered,
   Minus,
+  MessageSquare,
   MoreVertical,
   Pipette,
   Plus,
   RotateCcw,
   Search,
+  Shapes,
   Settings2,
+  Square,
+  Table2,
+  Triangle,
   Redo2,
   ChevronDown,
-  RefreshCw,
   SpellCheck,
-  Table2,
   Trash2,
   Underline as UnderlineIcon,
   Undo2,
   Upload,
   WandSparkles,
+  Type,
 } from "lucide-react";
 import BackToToolsButton from "./BackToToolsButton";
 import DocumentMakerPageEditor from "./DocumentMakerPage";
@@ -68,7 +73,6 @@ import { DOCUMENT_MAKER_EXTENSIONS } from "../lib/documentMakerExtensions";
 import {
   getDocumentMakerFontFamily,
   getBundledDocumentFonts,
-  getInstalledDocumentFontFamilies,
   getUploadedDocumentFonts,
   registerBundledDocumentFont,
   registerDocumentMakerFont,
@@ -87,6 +91,11 @@ import {
 import { DOCUMENT_MAKER_TEMPLATES, type DocumentMakerTemplate } from "../lib/documentMakerTemplates";
 import { useToolAutoSave } from "../hooks/useToolAutoSave";
 import { downloadBlob, savePDF } from "../lib/pdf";
+import {
+  getDocumentMakerShapeLabel,
+  DOCUMENT_MAKER_SHAPE_TYPES,
+  type DocumentMakerShapeType,
+} from "../lib/documentMakerShapes";
 
 interface Props {
   onClose: () => void;
@@ -484,11 +493,6 @@ function MoreToolbarMenu({
   compactItems,
   tinyTools,
   fontPicker,
-  tableRows,
-  tableColumns,
-  onTableRowsChange,
-  onTableColumnsChange,
-  onInsertTable,
   textColorPicker,
 }: {
   open: boolean;
@@ -498,11 +502,6 @@ function MoreToolbarMenu({
   compactItems: ToolbarMenuItem[];
   tinyTools: React.ReactNode;
   fontPicker: React.ReactNode;
-  tableRows: number;
-  tableColumns: number;
-  onTableRowsChange: (value: number) => void;
-  onTableColumnsChange: (value: number) => void;
-  onInsertTable: () => void;
   textColorPicker: React.ReactNode;
 }) {
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -598,49 +597,6 @@ function MoreToolbarMenu({
             <span className="flex-1">Text color</span>
             {textColorPicker}
           </div>
-          <div className="my-1 border-t border-ui" />
-          <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-            Insert table
-          </div>
-          {([
-            ["Columns", tableColumns, onTableColumnsChange],
-            ["Rows", tableRows, onTableRowsChange],
-          ] as const).map(([label, value, setValue]) => (
-            <div key={label} className="flex items-center justify-between px-2 py-1">
-              <span className="text-sm text-ink-secondary">{label}</span>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-label={`Decrease ${label.toLowerCase()}`}
-                  disabled={value <= 1}
-                  onClick={() => setValue(Math.max(1, value - 1))}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded text-ink-secondary hover:bg-surface-muted disabled:opacity-40"
-                >
-                  <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-                <output className="w-5 text-center text-sm tabular-nums text-ink-primary">{value}</output>
-                <button
-                  type="button"
-                  aria-label={`Increase ${label.toLowerCase()}`}
-                  disabled={value >= 20}
-                  onClick={() => setValue(Math.min(20, value + 1))}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded text-ink-secondary hover:bg-surface-muted disabled:opacity-40"
-                >
-                  <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => {
-              onInsertTable();
-              onClose();
-            }}
-            className="mt-1 flex h-9 w-full items-center justify-center rounded-lg bg-action px-3 text-sm font-semibold text-ink-inverse hover:bg-action-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-action"
-          >
-            Insert table
-          </button>
         </div>
       )}
     </div>
@@ -652,6 +608,8 @@ function ToolbarDropdown({
   icon,
   items,
   open,
+  active = false,
+  disabled = false,
   onToggle,
   onClose,
 }: {
@@ -659,6 +617,8 @@ function ToolbarDropdown({
   icon: React.ReactNode;
   items: ToolbarMenuItem[];
   open: boolean;
+  active?: boolean;
+  disabled?: boolean;
   onToggle: () => void;
   onClose: () => void;
 }) {
@@ -679,9 +639,11 @@ function ToolbarDropdown({
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-pressed={active}
+        disabled={disabled}
         onClick={onToggle}
         className={`inline-flex h-9 items-center gap-1 rounded-lg px-2 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-action ${
-          open ? "bg-action-subtle text-action" : "text-ink-secondary hover:bg-surface-subtle"
+          open || active ? "bg-action-subtle text-action" : "text-ink-secondary hover:bg-surface-subtle"
         }`}
       >
         {icon}
@@ -693,13 +655,14 @@ function ToolbarDropdown({
           aria-label={label}
           className="absolute left-0 top-full z-40 mt-1 flex min-w-max items-center gap-1 rounded-xl border border-ui bg-surface p-1.5 shadow-lg"
         >
-          {items.map(({ label: itemLabel, icon: itemIcon, active, onSelect }) => (
+          {items.map(({ label: itemLabel, icon: itemIcon, active, disabled: itemDisabled, onSelect }) => (
             <button
               key={itemLabel}
               type="button"
               role="menuitem"
               aria-label={itemLabel}
               aria-pressed={active}
+              disabled={itemDisabled || disabled}
               title={itemLabel}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
@@ -707,7 +670,9 @@ function ToolbarDropdown({
                 onClose();
               }}
               className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-action ${
-                active
+                itemDisabled || disabled
+                  ? "cursor-not-allowed text-ink-faint"
+                  : active
                   ? "bg-action-soft text-action"
                   : "text-ink-secondary hover:bg-surface-subtle hover:text-ink-primary"
               }`}
@@ -722,17 +687,32 @@ function ToolbarDropdown({
 }
 
 function getPagePreview(page: DocumentMakerPage) {
-  return generateText(page.content, DOCUMENT_MAKER_EXTENSIONS, {
+  const text = generateText(page.content, DOCUMENT_MAKER_EXTENSIONS, {
     blockSeparator: " ",
   })
     .replace(/\s+/g, " ")
     .trim();
+  if (text) return text;
+  let shapePreview = "";
+  page.content.content?.some((node) => {
+    if (node.type !== "documentShape") return false;
+    const shapeType = typeof node.attrs?.shapeType === "string" &&
+      DOCUMENT_MAKER_SHAPE_TYPES.includes(node.attrs.shapeType as DocumentMakerShapeType)
+      ? node.attrs.shapeType as DocumentMakerShapeType
+      : "rectangle";
+    const text = shapeType === "textBox" && typeof node.attrs?.text === "string"
+      ? node.attrs.text.trim()
+      : "";
+    shapePreview = text || getDocumentMakerShapeLabel(shapeType);
+    return true;
+  });
+  return shapePreview;
 }
 
 function hasDocumentContent(page: DocumentMakerPage) {
   const containsContent = (node: DocumentMakerPage["content"]): boolean => {
     if (node.text?.trim()) return true;
-    if (node.type === "image") return true;
+    if (node.type === "image" || node.type === "documentShape") return true;
     return node.content?.some((child) =>
       containsContent(child as DocumentMakerPage["content"]),
     ) ?? false;
@@ -786,8 +766,6 @@ export default function DocumentMaker({ onClose }: Props) {
   const [bundledFonts, setBundledFonts] = useState<
     Partial<Record<DocumentMakerLanguage, string[]>>
   >({});
-  const [systemFontFamilies, setSystemFontFamilies] = useState<string[]>([]);
-  const [isLoadingSystemFonts, setIsLoadingSystemFonts] = useState(false);
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
@@ -795,10 +773,11 @@ export default function DocumentMaker({ onClose }: Props) {
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
   const [tableColumns, setTableColumns] = useState(3);
   const [tableRows, setTableRows] = useState(3);
+  const [shapeTool, setShapeTool] = useState<DocumentMakerShapeType | null>(null);
   const [textColor, setTextColor] = useState("#000000");
   const [tablePickerPosition, setTablePickerPosition] = useState<{ left: number; top: number } | null>(null);
   const [openToolbarMenu, setOpenToolbarMenu] = useState<
-    "alignment" | "list" | "proofing" | "more" | null
+    "alignment" | "list" | "proofing" | "more" | "shapes" | null
   >(null);
   const editorByPage = useRef(new Map<string, Editor>());
   const activePageIdRef = useRef(activePageId);
@@ -1215,7 +1194,8 @@ export default function DocumentMaker({ onClose }: Props) {
   const copyDocument = async (withStyles: boolean) => {
     const text = pages
       .map((page) =>
-        generateText(page.content, DOCUMENT_MAKER_EXTENSIONS, { blockSeparator: "\n" }),
+        generateText(page.content, DOCUMENT_MAKER_EXTENSIONS, { blockSeparator: "\n" }).trim() ||
+          getPagePreview(page),
       )
       .join("\n\n");
     if (!text.trim()) {
@@ -1402,6 +1382,15 @@ export default function DocumentMaker({ onClose }: Props) {
     return () => window.removeEventListener("keydown", handleDocumentShortcut);
   }, [saveCurrentDocument]);
 
+  useEffect(() => {
+    if (!shapeTool) return;
+    const handleCancelDrawing = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShapeTool(null);
+    };
+    window.addEventListener("keydown", handleCancelDrawing);
+    return () => window.removeEventListener("keydown", handleCancelDrawing);
+  }, [shapeTool]);
+
   const insertImage = async (file?: File) => {
     if (!file || !activeEditor) return;
     if (!file.type.startsWith("image/")) {
@@ -1503,24 +1492,6 @@ export default function DocumentMaker({ onClose }: Props) {
     } catch (error) {
       console.error("Could not upload the selected font:", error);
       setMessage("Could not load or save that font. Check that the file is a valid font.");
-    }
-  };
-
-  const loadInstalledFonts = async () => {
-    setIsLoadingSystemFonts(true);
-    try {
-      const families = await getInstalledDocumentFontFamilies();
-      setSystemFontFamilies(families);
-      setMessage(`${families.length} installed font families loaded.`);
-    } catch (error) {
-      console.error("Could not scan installed fonts:", error);
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not scan installed fonts in this browser.",
-      );
-    } finally {
-      setIsLoadingSystemFonts(false);
     }
   };
 
@@ -1639,10 +1610,6 @@ export default function DocumentMaker({ onClose }: Props) {
     setMessage("");
   };
 
-  const insertManualPageBreak = () => {
-    activeEditor?.chain().focus().insertContent({ type: "pageBreak" }).run();
-  };
-
   const refreshDocumentLibrary = async () => {
     try {
       setSavedDocuments(await listSavedDocumentMakerDocuments());
@@ -1675,6 +1642,27 @@ export default function DocumentMaker({ onClose }: Props) {
     if (nextSize) applyFontSize(nextSize);
   };
   const currentFontFamily = activeEditor?.getAttributes("textStyle").fontFamily ?? "";
+  const shapeToolbarItems = DOCUMENT_MAKER_SHAPE_TYPES.map((shapeType) => {
+    const icons = {
+      rectangle: <Square className="h-4 w-4" aria-hidden="true" />,
+      roundedRectangle: <Square className="h-4 w-4 rounded-md" aria-hidden="true" />,
+      ellipse: <Circle className="h-4 w-4" aria-hidden="true" />,
+      line: <Minus className="h-4 w-4" aria-hidden="true" />,
+      arrow: <ArrowRight className="h-4 w-4" aria-hidden="true" />,
+      triangle: <Triangle className="h-4 w-4" aria-hidden="true" />,
+      callout: <MessageSquare className="h-4 w-4" aria-hidden="true" />,
+      textBox: <Type className="h-4 w-4" aria-hidden="true" />,
+    };
+    return {
+      label: getDocumentMakerShapeLabel(shapeType),
+      icon: icons[shapeType],
+      active: shapeTool === shapeType,
+      disabled: !activeEditor,
+      onSelect: () => {
+        if (activeEditor) setShapeTool((current) => current === shapeType ? null : shapeType);
+      },
+    };
+  });
   const languageFonts = [
     ...new Set([
       ...LANGUAGE_FONT_FAMILIES[language],
@@ -1698,16 +1686,12 @@ export default function DocumentMaker({ onClose }: Props) {
   };
   if (currentFontFamily && ![
     ...languageFonts,
-    ...(language === "english" ? systemFontFamilies : []),
     ...uploadedFonts.map(({ family }) => family),
   ].includes(currentFontFamily)) {
     fontOptions.push({ value: currentFontFamily, label: currentFontFamily });
     knownFontFamilies.add(currentFontFamily);
   }
   appendFontGroup(fontGroupLabel, languageFonts);
-  if (language === "english") {
-    appendFontGroup("Installed system fonts", systemFontFamilies);
-  }
   appendFontGroup("Uploaded fonts", uploadedFonts.map(({ family }) => family));
   const applyFontFamily = (value: string) => {
     if (!activeEditor) return;
@@ -1835,14 +1819,6 @@ export default function DocumentMaker({ onClose }: Props) {
     </>
   );
   const moreToolbarItems: ToolbarMenuItem[] = [
-    ...(language === "english"
-      ? [{
-          label: isLoadingSystemFonts ? "Loading installed fonts" : "Load installed fonts",
-          icon: <RefreshCw className={`h-4 w-4 ${isLoadingSystemFonts ? "animate-spin" : ""}`} aria-hidden="true" />,
-          disabled: isLoadingSystemFonts,
-          onSelect: () => void loadInstalledFonts(),
-        }]
-      : []),
     {
       label: "Upload font",
       icon: <Upload className="h-4 w-4" aria-hidden="true" />,
@@ -1867,18 +1843,6 @@ export default function DocumentMaker({ onClose }: Props) {
           },
         ]
       : []),
-    {
-      label: "Insert image",
-      icon: <ImagePlus className="h-4 w-4" aria-hidden="true" />,
-      disabled: !activeEditor,
-      onSelect: () => imageInputRef.current?.click(),
-    },
-    {
-      label: "Insert page break",
-      icon: <FilePlus2 className="h-4 w-4" aria-hidden="true" />,
-      disabled: !activeEditor,
-      onSelect: insertManualPageBreak,
-    },
     {
       label: "Find and replace",
       icon: <Search className="h-4 w-4" aria-hidden="true" />,
@@ -1982,19 +1946,6 @@ export default function DocumentMaker({ onClose }: Props) {
               options={fontOptions}
               className="document-maker-toolbar-font-family !w-44 max-w-full shrink-0 px-2"
             />
-            {language === "english" && (
-              <ToolbarButton
-                label={isLoadingSystemFonts ? "Loading installed fonts" : "Load installed fonts"}
-                disabled={isLoadingSystemFonts}
-                onClick={() => void loadInstalledFonts()}
-                className="document-maker-toolbar-optional"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${isLoadingSystemFonts ? "animate-spin" : ""}`}
-                  aria-hidden="true"
-                />
-              </ToolbarButton>
-            )}
             <input
               ref={fontInputRef}
               type="file"
@@ -2045,7 +1996,7 @@ export default function DocumentMaker({ onClose }: Props) {
                 <Plus className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
-            <span className="mx-1 h-6 w-px bg-ui" aria-hidden="true" />
+            <span className="document-maker-toolbar-size-divider mx-1 h-6 w-px bg-ui" aria-hidden="true" />
             <ToolbarButton
               label="Bold"
               active={Boolean(activeEditor?.isActive("bold"))}
@@ -2212,7 +2163,6 @@ export default function DocumentMaker({ onClose }: Props) {
               />
               </span>
             )}
-            <span className="document-maker-toolbar-optional mx-1 h-6 w-px bg-ui" aria-hidden="true" />
             <input
               ref={imageInputRef}
               type="file"
@@ -2228,29 +2178,22 @@ export default function DocumentMaker({ onClose }: Props) {
               label="Insert image"
               disabled={!activeEditor}
               onClick={() => imageInputRef.current?.click()}
-              className="document-maker-toolbar-optional"
             >
               <ImagePlus className="h-4 w-4" aria-hidden="true" />
             </ToolbarButton>
-            <ToolbarButton
-              label="Insert page break"
+            <ToolbarDropdown
+              label="Shape tool"
+              icon={<Shapes className="h-4 w-4" aria-hidden="true" />}
+              open={openToolbarMenu === "shapes"}
+              active={shapeTool !== null}
               disabled={!activeEditor}
-              onClick={insertManualPageBreak}
-              className="document-maker-toolbar-optional"
-            >
-              <FilePlus2 className="h-4 w-4" aria-hidden="true" />
-            </ToolbarButton>
-            <ToolbarButton
-              label="Find and replace"
-              onClick={() => setFindReplaceOpen(true)}
-              className="document-maker-toolbar-optional"
-            >
-              <Search className="h-4 w-4" aria-hidden="true" />
-            </ToolbarButton>
-            <div
-              ref={tablePickerAnchorRef}
-              className="document-maker-toolbar-optional relative"
-            >
+              onToggle={() =>
+                setOpenToolbarMenu((current) => current === "shapes" ? null : "shapes")
+              }
+              onClose={() => setOpenToolbarMenu(null)}
+              items={shapeToolbarItems}
+            />
+            <div ref={tablePickerAnchorRef} className="relative">
               <ToolbarButton
                 label="Insert table"
                 disabled={!activeEditor}
@@ -2275,59 +2218,58 @@ export default function DocumentMaker({ onClose }: Props) {
                       visibility: tablePickerPosition ? "visible" : "hidden",
                     }}
                   >
-                  {([
-                    {
-                      label: "Columns",
-                      value: tableColumns,
-                      setValue: setTableColumns,
-                    },
-                    {
-                      label: "Rows",
-                      value: tableRows,
-                      setValue: setTableRows,
-                    },
-                  ] as const).map(({ label, value, setValue }) => (
-                    <div
-                      key={label}
-                      className="flex items-center justify-between border-b border-ui py-1.5 last:mb-2"
-                    >
-                      <span className="text-sm text-ink-primary">{label}</span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          aria-label={`Decrease ${label.toLowerCase()}`}
-                          disabled={value <= 1}
-                          onClick={() => setValue((count) => Math.max(1, count - 1))}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded text-ink-secondary hover:bg-surface-muted disabled:opacity-40"
-                        >
-                          <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                        <output className="w-5 text-center text-sm tabular-nums text-ink-primary">
-                          {value}
-                        </output>
-                        <button
-                          type="button"
-                          aria-label={`Increase ${label.toLowerCase()}`}
-                          disabled={value >= 20}
-                          onClick={() => setValue((count) => Math.min(20, count + 1))}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded text-ink-secondary hover:bg-surface-muted disabled:opacity-40"
-                        >
-                          <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
+                    {([
+                      { label: "Columns", value: tableColumns, setValue: setTableColumns },
+                      { label: "Rows", value: tableRows, setValue: setTableRows },
+                    ] as const).map(({ label, value, setValue }) => (
+                      <div
+                        key={label}
+                        className="flex items-center justify-between border-b border-ui py-1.5 last:mb-2"
+                      >
+                        <span className="text-sm text-ink-primary">{label}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            aria-label={`Decrease ${label.toLowerCase()}`}
+                            disabled={value <= 1}
+                            onClick={() => setValue((count) => Math.max(1, count - 1))}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded text-ink-secondary hover:bg-surface-muted disabled:opacity-40"
+                          >
+                            <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <output className="w-5 text-center text-sm tabular-nums text-ink-primary">
+                            {value}
+                          </output>
+                          <button
+                            type="button"
+                            aria-label={`Increase ${label.toLowerCase()}`}
+                            disabled={value >= 20}
+                            onClick={() => setValue((count) => Math.min(20, count + 1))}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded text-ink-secondary hover:bg-surface-muted disabled:opacity-40"
+                          >
+                            <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={insertConfiguredTable}
-                    className="mt-1 flex h-9 w-full items-center justify-center rounded-lg bg-action px-3 text-sm font-semibold text-ink-inverse hover:bg-action-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-action"
-                  >
-                    Insert Table
-                  </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={insertConfiguredTable}
+                      className="mt-1 flex h-9 w-full items-center justify-center rounded-lg bg-action px-3 text-sm font-semibold text-ink-inverse hover:bg-action-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-action"
+                    >
+                      Insert table
+                    </button>
                   </div>,
                   document.body,
                 )}
             </div>
+            <ToolbarButton
+              label="Find and replace"
+              onClick={() => setFindReplaceOpen(true)}
+              className="document-maker-toolbar-optional"
+            >
+              <Search className="h-4 w-4" aria-hidden="true" />
+            </ToolbarButton>
             </div>
             <MoreToolbarMenu
               open={openToolbarMenu === "more"}
@@ -2339,11 +2281,6 @@ export default function DocumentMaker({ onClose }: Props) {
               compactItems={compactMoreToolbarItems}
               tinyTools={tinyToolbarTools}
               fontPicker={compactFontPicker}
-              tableRows={tableRows}
-              tableColumns={tableColumns}
-              onTableRowsChange={setTableRows}
-              onTableColumnsChange={setTableColumns}
-              onInsertTable={insertConfiguredTable}
               textColorPicker={textColorPicker}
             />
             <ToolbarButton
@@ -2526,6 +2463,7 @@ export default function DocumentMaker({ onClose }: Props) {
                   language={language}
                   spellCheck={spellCheck}
                   autoCorrect={autoCorrect}
+                  shapeTool={shapeTool}
                   onContentChange={handlePageContentChange}
                   onAutoPage={handleAutoPage}
                   onActivate={activatePage}

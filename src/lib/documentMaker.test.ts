@@ -225,6 +225,29 @@ describe("document maker typing helpers", () => {
               },
             ],
           },
+          {
+            type: "documentShape",
+            attrs: {
+              shapeType: "roundedRectangle",
+              x: 120,
+              y: 80,
+              width: 180,
+              height: 90,
+              fill: "#DCFCE7",
+              stroke: "#15803D",
+            },
+          },
+          {
+            type: "documentShape",
+            attrs: {
+              shapeType: "textBox",
+              x: 320,
+              y: 80,
+              width: 180,
+              height: 90,
+              text: "Editable note",
+            },
+          },
         ],
       },
       DOCUMENT_MAKER_EXTENSIONS,
@@ -242,6 +265,8 @@ describe("document maker typing helpers", () => {
     expect(html).toContain("<table");
     expect(html).toContain('data-row-height="40"');
     expect(html).toContain("<th>");
+    expect(html).toContain('data-shape-type="roundedRectangle"');
+    expect(html).toContain("Editable note");
   });
 
   it("derives a safe font family name from an uploaded font filename", () => {
@@ -265,6 +290,30 @@ describe("document maker typing helpers", () => {
             height: 48,
             x: 120,
             y: 180,
+          },
+        },
+        {
+          type: "documentShape",
+          attrs: {
+            shapeType: "ellipse",
+            x: 120,
+            y: 80,
+            width: 180,
+            height: 90,
+            fill: "#DBEAFE",
+            stroke: "#2563EB",
+          },
+        },
+        {
+          type: "documentShape",
+          attrs: {
+            shapeType: "textBox",
+            x: 320,
+            y: 80,
+            width: 180,
+            height: 90,
+            fill: "none",
+            text: "Editable note",
           },
         },
       ],
@@ -293,16 +342,28 @@ describe("document maker typing helpers", () => {
     try {
       const page = createDocumentMakerPage({
         type: "doc",
-        content: [{
-          type: "bulletList",
-          content: [{
-            type: "listItem",
+        content: [
+          {
+            type: "bulletList",
             content: [{
-              type: "paragraph",
-              content: [{ type: "text", text: "First list item" }],
+              type: "listItem",
+              content: [{
+                type: "paragraph",
+                content: [{ type: "text", text: "First list item" }],
+              }],
             }],
-          }],
-        }],
+          },
+          {
+            type: "documentShape",
+            attrs: {
+              shapeType: "triangle",
+              x: 60,
+              y: 120,
+              width: 120,
+              height: 110,
+            },
+          },
+        ],
       });
 
       const pdf = await generateDocumentMakerPdf([page], DEFAULT_DOCUMENT_MAKER_LAYOUT);

@@ -7,6 +7,12 @@ import {
 } from "./documentMaker";
 import { getUploadedDocumentFonts } from "./documentMakerFonts";
 import { DOCUMENT_MAKER_EXTENSIONS } from "./documentMakerExtensions";
+import {
+  DEFAULT_DOCUMENT_MAKER_SHAPE,
+  getDocumentMakerShapeColor,
+  getDocumentMakerShapeMarkup,
+  isDocumentMakerShapeType,
+} from "./documentMakerShapes";
 
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (character) => ({
@@ -216,6 +222,54 @@ function blockPdfContent(
   pageBreakBefore = false,
 ): unknown {
   if (node.type === "pageBreak") return { text: "", pageBreak: "before" };
+  if (node.type === "documentShape") {
+    const attrs = node.attrs ?? {};
+    const shapeType = isDocumentMakerShapeType(attrs.shapeType) ? attrs.shapeType : "rectangle";
+    const shape = getDocumentMakerShapeMarkup(shapeType);
+    const width = Math.max(1, Number(attrs.width) || 160);
+    const height = Math.max(1, Number(attrs.height) || 100);
+    const fill = getDocumentMakerShapeColor(attrs.fill, DEFAULT_DOCUMENT_MAKER_SHAPE.fill);
+    const stroke = getDocumentMakerShapeColor(attrs.stroke, DEFAULT_DOCUMENT_MAKER_SHAPE.stroke);
+    const dash = attrs.dashed ? ' stroke-dasharray="6 4"' : "";
+    const opacity = Math.max(0, Math.min(1, Number(attrs.opacity) || 1));
+    const shapeAttrs = Object.entries(shape[1])
+      .map(([name, value]) => `${name}="${String(value)}"`)
+      .join(" ");
+    const svgShape = shape[0] === "ellipse" || shape[0] === "line"
+      ? `<${shape[0]} ${shapeAttrs}/>`
+      : `<${shape[0]} ${shapeAttrs}/>`;
+    const textBox = shapeType === "textBox";
+    const svg = textBox
+      ? ""
+      : `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 100 100"><g fill="${fill === "none" || shapeType === "line" ? "none" : fill}" fill-opacity="${opacity}" stroke="${stroke}" stroke-opacity="${opacity}" stroke-width="${Number(attrs.strokeWidth) || 2}"${dash} stroke-linecap="round" stroke-linejoin="round">${svgShape}</g></svg>`;
+    return textBox
+      ? {
+          text: typeof attrs.text === "string" ? attrs.text : "",
+          absolutePosition: {
+            x: (Number(attrs.x) || 0) * 72 / 96,
+            y: (Number(attrs.y) || 0) * 72 / 96,
+          },
+          width: width * 72 / 96,
+          height: height * 72 / 96,
+          fontSize: 12,
+          color: "#0f172a",
+          ...(fill === "none" ? {} : { fillColor: fill }),
+          border: [true, true, true, true],
+          borderColor: stroke,
+          borderWidth: Number(attrs.strokeWidth) || 2,
+          ...(pageBreakBefore ? { pageBreak: "before" } : {}),
+        }
+      : {
+          svg: svg.replace(/<g /, `<g transform="rotate(${Number(attrs.rotation) || 0} 50 50)" `),
+          width: width * 72 / 96,
+          height: height * 72 / 96,
+          absolutePosition: {
+            x: (Number(attrs.x) || 0) * 72 / 96,
+            y: (Number(attrs.y) || 0) * 72 / 96,
+          },
+          ...(pageBreakBefore ? { pageBreak: "before" } : {}),
+        };
+  }
   if (node.type === "image" && typeof node.attrs?.src === "string") {
     const position = typeof node.attrs.x === "number" && typeof node.attrs.y === "number"
       ? {
