@@ -88,6 +88,8 @@ export default function DocumentMakerPageEditor({
   const [tableContextMenu, setTableContextMenu] = useState<TableContextMenu | null>(null);
   const [imageContextMenu, setImageContextMenu] = useState<ImageContextMenu | null>(null);
   const [isDraggingTable, setIsDraggingTable] = useState(false);
+  const tableContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const imageContextMenuRef = useRef<HTMLDivElement | null>(null);
   const suggestionRef = useRef(suggestion);
   const selectedSuggestionRef = useRef(selectedSuggestion);
   const rowResizeRef = useRef<RowResizeState | null>(null);
@@ -321,6 +323,26 @@ export default function DocumentMakerPageEditor({
     [editor],
   );
   acceptSuggestionRef.current = replaceWithSuggestion;
+
+  useEffect(() => {
+    if (!tableContextMenu && !imageContextMenu) return;
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (
+        tableContextMenuRef.current?.contains(target) ||
+        imageContextMenuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setTableContextMenu(null);
+      setImageContextMenu(null);
+    };
+
+    document.addEventListener("pointerdown", handleOutsidePointerDown);
+    return () => document.removeEventListener("pointerdown", handleOutsidePointerDown);
+  }, [imageContextMenu, tableContextMenu]);
 
   const handleTableContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target;
@@ -640,11 +662,15 @@ export default function DocumentMakerPageEditor({
       {(layout.footer || layout.pageNumbers) && (
         <div className="document-maker-page-footer">
           <span>{layout.footer}</span>
-          <span>{layout.pageNumbers ? `${pageNumber}` : ""}</span>
+          {layout.pageNumbers && (
+            <span className="document-maker-page-number">{pageNumber}</span>
+          )}
+          {layout.pageNumbers && <span aria-hidden="true" />}
         </div>
       )}
       {tableContextMenu && active && (
         <div
+          ref={tableContextMenuRef}
           role="menu"
           aria-label="Table options"
           onMouseDown={(event) => event.preventDefault()}
@@ -693,6 +719,7 @@ export default function DocumentMakerPageEditor({
       )}
       {imageContextMenu && active && (
         <div
+          ref={imageContextMenuRef}
           role="menu"
           aria-label="Image options"
           onMouseDown={(event) => event.preventDefault()}

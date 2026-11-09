@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import type { Editor } from "@tiptap/core";
 import { generateHTML, generateText } from "@tiptap/core";
 import {
@@ -21,8 +22,9 @@ import {
   ListOrdered,
   Minus,
   MoreVertical,
+  Pipette,
   Plus,
-  Palette,
+  RotateCcw,
   Search,
   Settings2,
   Redo2,
@@ -40,6 +42,7 @@ import BackToToolsButton from "./BackToToolsButton";
 import DocumentMakerPageEditor from "./DocumentMakerPage";
 import Dropdown, { type DropdownOption } from "./Dropdown";
 import AutoSaveStatusIndicator from "./AutoSaveStatusIndicator";
+import DialogFrame from "./DialogFrame";
 import InputField from "./InputField";
 import {
   DocumentExportDialog,
@@ -173,6 +176,7 @@ function ToolbarButton({
   label,
   active = false,
   disabled = false,
+  preserveSelection = false,
   onClick,
   children,
   className = "",
@@ -180,6 +184,7 @@ function ToolbarButton({
   label: string;
   active?: boolean;
   disabled?: boolean;
+  preserveSelection?: boolean;
   onClick: () => void;
   children: React.ReactNode;
   className?: string;
@@ -191,6 +196,7 @@ function ToolbarButton({
       title={label}
       aria-pressed={active}
       disabled={disabled}
+      onMouseDown={preserveSelection ? (event) => event.preventDefault() : undefined}
       onClick={onClick}
       className={`document-maker-toolbar-button ${className} inline-flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         active
@@ -200,6 +206,263 @@ function ToolbarButton({
     >
       {children}
     </button>
+  );
+}
+
+const TEXT_COLOR_PALETTE = [
+  ["#000000", "#404040", "#666666", "#808080", "#999999", "#B3B3B3", "#D9D9D9", "#FFFFFF"],
+  ["#C00000", "#F00000", "#FF9900", "#FFFF00", "#00B050", "#00B0F0", "#4472C4", "#0000FF", "#7030A0"],
+  ...[88, 75, 60, 45, 30].map((lightness) =>
+    [0, 330, 30, 50, 100, 180, 210, 230, 270].map(
+      (hue) => `hsl(${hue} 55% ${lightness}%)`,
+    ),
+  ),
+];
+
+interface EyeDropperConstructor {
+  new (): {
+    open: () => Promise<{ sRGBHex: string }>;
+  };
+}
+
+function TextColorPicker({
+  color,
+  disabled,
+  className = "",
+  onChange,
+  onReset,
+  onError,
+}: {
+  color: string;
+  disabled?: boolean;
+  className?: string;
+  onChange: (color: string) => void;
+  onReset: () => void;
+  onError: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const [recentColors, setRecentColors] = useState<string[]>([]);
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const pickerInputRef = useRef<HTMLInputElement>(null);
+
+  const selectColor = (nextColor: string, addToRecent = false) => {
+    onChange(nextColor);
+    if (addToRecent) {
+      setRecentColors((current) => [
+        nextColor,
+        ...current.filter((recent) => recent.toLowerCase() !== nextColor.toLowerCase()),
+      ].slice(0, 9));
+    }
+    setOpen(false);
+  };
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const anchor = anchorRef.current?.getBoundingClientRect();
+      const popover = popoverRef.current?.getBoundingClientRect();
+      if (!anchor || !popover) return;
+      const left = Math.max(8, Math.min(anchor.left, window.innerWidth - popover.width - 8));
+      const below = anchor.bottom + 4;
+      const top =
+        below + popover.height <= window.innerHeight - 8
+          ? below
+          : Math.max(8, anchor.top - popover.height - 4);
+      setPosition({ left, top });
+    };
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        !anchorRef.current?.contains(target) &&
+        !popoverRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
+    };
+
+    updatePosition();
+    document.addEventListener("pointerdown", handleOutsidePointerDown);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointerDown);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  const pickFromScreen = async () => {
+    const EyeDropper = (window as Window & {
+      EyeDropper?: EyeDropperConstructor;
+    }).EyeDropper;
+    if (!EyeDropper || !window.isSecureContext) {
+      pickerInputRef.current?.click();
+      return;
+    }
+    try {
+      const result = await new EyeDropper().open();
+      selectColor(result.sRGBHex, true);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      console.error("Could not pick a color from the screen:", error);
+      onError("Could not pick a color from the screen. Choose a custom color instead.");
+    }
+  };
+
+  const inputColor = /^#[\da-f]{6}$/i.test(color) ? color : "#000000";
+
+  return (
+    <>
+      <button
+        ref={anchorRef}
+        type="button"
+        aria-label="Text color"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        disabled={disabled}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => setOpen((current) => !current)}
+        className={`document-maker-toolbar-button relative inline-flex h-9 w-9 flex-col items-center justify-center rounded-lg text-ink-secondary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      >
+        <span className="text-sm font-bold leading-none" aria-hidden="true">A</span>
+        <span
+          className="mt-0.5 h-1 w-4 rounded-sm"
+          style={{ backgroundColor: color }}
+          aria-hidden="true"
+        />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            role="dialog"
+            aria-label="Text color palette"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setOpen(false);
+                anchorRef.current?.focus();
+              }
+            }}
+            className="fixed z-50 max-h-[min(70vh,32rem)] w-[min(20rem,calc(100vw-1rem))] overflow-auto rounded-xl border border-ui bg-surface p-3 shadow-xl"
+            style={{
+              left: position?.left ?? 0,
+              top: position?.top ?? 0,
+              visibility: position ? "visible" : "hidden",
+            }}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
+                Pre-designated colors
+              </h3>
+              <button
+                type="button"
+                aria-label="Reset text color"
+                title="Reset to automatic color"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  onReset();
+                  setOpen(false);
+                }}
+                className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-ink-secondary hover:bg-surface-subtle"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                Reset
+              </button>
+            </div>
+            <div className="space-y-1.5">
+              {TEXT_COLOR_PALETTE.map((row, rowIndex) => (
+                <div key={rowIndex} className="flex items-center justify-between gap-1">
+                  {row.map((swatch) => {
+                    const selected = swatch.toLowerCase() === color.toLowerCase();
+                    return (
+                      <button
+                        key={swatch}
+                        type="button"
+                        aria-label={`Set text color to ${swatch}`}
+                        aria-pressed={selected}
+                        title={swatch}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => selectColor(swatch)}
+                        className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-ui/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-action ${
+                          selected ? "ring-2 ring-action ring-offset-1 ring-offset-surface" : ""
+                        }`}
+                        style={{ backgroundColor: swatch }}
+                      >
+                        {selected && (
+                          <Check
+                            className={`h-4 w-4 drop-shadow ${
+                              ["#000000", "#404040", "#666666", "#0000FF", "#7030A0"].includes(swatch.toUpperCase())
+                                ? "text-white"
+                                : "text-ink-primary"
+                            }`}
+                            aria-hidden="true"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 border-t border-ui pt-2">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-secondary">
+                Custom
+              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                {recentColors.map((recentColor) => (
+                  <button
+                    key={recentColor}
+                    type="button"
+                    aria-label={`Use recent text color ${recentColor}`}
+                    title={recentColor}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectColor(recentColor)}
+                    className="h-6 w-6 rounded-full border border-ui focus-visible:outline focus-visible:outline-2 focus-visible:outline-action"
+                    style={{ backgroundColor: recentColor }}
+                  />
+                ))}
+                <button
+                  type="button"
+                  aria-label="Choose a custom color"
+                  title="Choose a custom color"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => pickerInputRef.current?.click()}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-ui text-ink-secondary hover:bg-surface-subtle"
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Pick a color from the screen"
+                  title="Pick a color from the screen"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => void pickFromScreen()}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-ui text-ink-secondary hover:bg-surface-subtle"
+                >
+                  <Pipette className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+              <input
+                ref={pickerInputRef}
+                type="color"
+                aria-label="Choose a custom text color"
+                value={inputColor}
+                onChange={(event) => selectColor(event.target.value, true)}
+                className="pointer-events-none absolute h-px w-px opacity-0"
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -226,7 +489,7 @@ function MoreToolbarMenu({
   onTableRowsChange,
   onTableColumnsChange,
   onInsertTable,
-  onTextColorChange,
+  textColorPicker,
 }: {
   open: boolean;
   onToggle: () => void;
@@ -240,7 +503,7 @@ function MoreToolbarMenu({
   onTableRowsChange: (value: number) => void;
   onTableColumnsChange: (value: number) => void;
   onInsertTable: () => void;
-  onTextColorChange: (value: string) => void;
+  textColorPicker: React.ReactNode;
 }) {
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPosition, setMenuPosition] = useState<{
@@ -331,17 +594,10 @@ function MoreToolbarMenu({
               )}
             </button>
           ))}
-          <label className="document-maker-more-compact flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-ink-primary hover:bg-surface-muted">
-            <Palette className="h-4 w-4 text-ink-secondary" aria-hidden="true" />
+          <div className="document-maker-more-compact flex min-h-9 items-center justify-between gap-2 rounded-lg px-2.5 py-1 text-sm text-ink-primary">
             <span className="flex-1">Text color</span>
-            <input
-              type="color"
-              aria-label="Text color"
-              defaultValue="#000000"
-              onChange={(event) => onTextColorChange(event.target.value)}
-              className="h-6 w-8 cursor-pointer rounded border-0 bg-transparent p-0"
-            />
-          </label>
+            {textColorPicker}
+          </div>
           <div className="my-1 border-t border-ui" />
           <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
             Insert table
@@ -503,6 +759,10 @@ export default function DocumentMaker({ onClose }: Props) {
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkHref, setLinkHref] = useState("");
+  const [linkError, setLinkError] = useState("");
+  const [linkIsEditing, setLinkIsEditing] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [docxImporting, setDocxImporting] = useState(false);
   const [exportFileName, setExportFileName] = useState("Untitled document");
@@ -515,6 +775,13 @@ export default function DocumentMaker({ onClose }: Props) {
   const [confirmDeletePageId, setConfirmDeletePageId] = useState<string | null>(null);
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [, setEditorSelectionVersion] = useState(0);
+  const linkSelectionRef = useRef<{
+    editor: Editor;
+    from: number;
+    to: number;
+  } | null>(null);
+  const tablePickerAnchorRef = useRef<HTMLDivElement>(null);
+  const tablePickerRef = useRef<HTMLDivElement>(null);
   const [uploadedFonts, setUploadedFonts] = useState<UploadedDocumentFont[]>([]);
   const [bundledFonts, setBundledFonts] = useState<
     Partial<Record<DocumentMakerLanguage, string[]>>
@@ -528,6 +795,8 @@ export default function DocumentMaker({ onClose }: Props) {
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
   const [tableColumns, setTableColumns] = useState(3);
   const [tableRows, setTableRows] = useState(3);
+  const [textColor, setTextColor] = useState("#000000");
+  const [tablePickerPosition, setTablePickerPosition] = useState<{ left: number; top: number } | null>(null);
   const [openToolbarMenu, setOpenToolbarMenu] = useState<
     "alignment" | "list" | "proofing" | "more" | null
   >(null);
@@ -1258,22 +1527,115 @@ export default function DocumentMaker({ onClose }: Props) {
   const applyAlignment = (alignment: "left" | "center" | "right" | "justify") => {
     activeEditor?.chain().focus().setTextAlign(alignment).run();
   };
+  const currentTextColor =
+    activeEditor?.getAttributes("textStyle").color ?? textColor;
+  const applyTextColor = (color: string) => {
+    setTextColor(color);
+    activeEditor?.chain().focus().setColor(color).run();
+  };
+  const resetTextColor = () => {
+    setTextColor("#000000");
+    activeEditor?.chain().focus().unsetColor().run();
+  };
+  const textColorPicker = (
+    <TextColorPicker
+      color={currentTextColor}
+      disabled={!activeEditor}
+      onChange={applyTextColor}
+      onReset={resetTextColor}
+      onError={setMessage}
+    />
+  );
 
   const setLink = () => {
     if (!activeEditor) return;
+    const selection = activeEditor.state.selection;
     const currentHref = activeEditor.getAttributes("link").href as string | undefined;
-    const entered = window.prompt("Enter a web address (https://…)", currentHref ?? "https://");
-    if (entered === null) return;
-    const href = entered.trim();
+    linkSelectionRef.current = {
+      editor: activeEditor,
+      from: selection.from,
+      to: selection.to,
+    };
+    setLinkHref(currentHref ?? "");
+    setLinkIsEditing(Boolean(currentHref));
+    setLinkError("");
+    setLinkDialogOpen(true);
+  };
+
+  const closeLinkDialog = () => {
+    const savedSelection = linkSelectionRef.current;
+    setLinkDialogOpen(false);
+    setLinkError("");
+    if (savedSelection) {
+      savedSelection.editor
+        .chain()
+        .focus()
+        .setTextSelection({
+          from: savedSelection.from,
+          to: savedSelection.to,
+        })
+        .run();
+    }
+    linkSelectionRef.current = null;
+  };
+
+  const removeLink = () => {
+    const savedSelection = linkSelectionRef.current;
+    if (!savedSelection) {
+      setLinkError("Select linked text in the document before removing its link.");
+      return;
+    }
+    const applied = savedSelection.editor
+      .chain()
+      .focus()
+      .setTextSelection({
+        from: savedSelection.from,
+        to: savedSelection.to,
+      })
+      .unsetLink()
+      .run();
+    if (!applied) {
+      setLinkError("Could not remove the link from the selected text.");
+      return;
+    }
+    linkSelectionRef.current = null;
+    setLinkDialogOpen(false);
+    setLinkError("");
+    setMessage("");
+  };
+
+  const applyLink = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const href = linkHref.trim();
+    const savedSelection = linkSelectionRef.current;
+    if (!savedSelection) {
+      setLinkError("Select text in the document before adding a link.");
+      return;
+    }
     if (!href) {
-      activeEditor.chain().focus().unsetLink().run();
+      setLinkError("Enter a complete web address beginning with https:// or http://.");
       return;
     }
-    if (!/^https?:\/\//i.test(href)) {
-      setMessage("Enter a complete web address beginning with https:// or http://.");
+    if (!/^https?:\/\/\S+$/i.test(href)) {
+      setLinkError("Enter a complete web address beginning with https:// or http://.");
       return;
     }
-    activeEditor.chain().focus().setLink({ href }).run();
+    const applied = savedSelection.editor
+      .chain()
+      .focus()
+      .setTextSelection({
+        from: savedSelection.from,
+        to: savedSelection.to,
+      })
+      .setLink({ href })
+      .run();
+    if (!applied) {
+      setLinkError("Could not apply the link to the selected text.");
+      return;
+    }
+    linkSelectionRef.current = null;
+    setLinkDialogOpen(false);
+    setLinkError("");
     setMessage("");
   };
 
@@ -1363,6 +1725,52 @@ export default function DocumentMaker({ onClose }: Props) {
     }).run();
     setTablePickerOpen(false);
   };
+
+  useLayoutEffect(() => {
+    if (!tablePickerOpen) {
+      setTablePickerPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const anchor = tablePickerAnchorRef.current?.getBoundingClientRect();
+      const picker = tablePickerRef.current?.getBoundingClientRect();
+      if (!anchor || !picker) return;
+
+      const left = Math.max(
+        8,
+        Math.min(anchor.left, window.innerWidth - picker.width - 8),
+      );
+      const below = anchor.bottom + 4;
+      const top =
+        below + picker.height <= window.innerHeight - 8
+          ? below
+          : Math.max(8, anchor.top - picker.height - 4);
+      setTablePickerPosition({ left, top });
+    };
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        !tablePickerAnchorRef.current?.contains(target) &&
+        !tablePickerRef.current?.contains(target)
+      ) {
+        setTablePickerOpen(false);
+      }
+    };
+
+    updatePosition();
+    document.addEventListener("pointerdown", handleOutsidePointerDown);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      document.removeEventListener("pointerdown", handleOutsidePointerDown);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [tablePickerOpen]);
+
   const compactFontPicker = (
     <Dropdown
       aria-label={`Font family (${language})`}
@@ -1663,21 +2071,20 @@ export default function DocumentMaker({ onClose }: Props) {
               label="Insert or edit link"
               disabled={!activeEditor}
               active={Boolean(activeEditor?.isActive("link"))}
+              preserveSelection
               onClick={setLink}
               className="document-maker-toolbar-secondary"
             >
               <Link2 className="h-4 w-4" aria-hidden="true" />
             </ToolbarButton>
-            <label className="document-maker-toolbar-secondary inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-ink-secondary hover:bg-surface-subtle" title="Text color">
-              <Palette className="h-4 w-4" aria-hidden="true" />
-              <input
-                type="color"
-                aria-label="Text color"
-                disabled={!activeEditor}
-                onChange={(event) => activeEditor?.chain().focus().setColor(event.target.value).run()}
-                className="absolute h-px w-px opacity-0"
-              />
-            </label>
+            <TextColorPicker
+              color={currentTextColor}
+              disabled={!activeEditor}
+              className="document-maker-toolbar-secondary"
+              onChange={applyTextColor}
+              onReset={resetTextColor}
+              onError={setMessage}
+            />
             <ToolbarButton
               label="Highlight"
               disabled={!activeEditor}
@@ -1841,15 +2248,8 @@ export default function DocumentMaker({ onClose }: Props) {
               <Search className="h-4 w-4" aria-hidden="true" />
             </ToolbarButton>
             <div
+              ref={tablePickerAnchorRef}
               className="document-maker-toolbar-optional relative"
-              onBlur={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                  setTablePickerOpen(false);
-                }
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") setTablePickerOpen(false);
-              }}
             >
               <ToolbarButton
                 label="Insert table"
@@ -1859,12 +2259,22 @@ export default function DocumentMaker({ onClose }: Props) {
               >
                 <Table2 className="h-4 w-4" aria-hidden="true" />
               </ToolbarButton>
-              {tablePickerOpen && (
-                <div
-                  role="dialog"
-                  aria-label="Insert table size"
-                  className="absolute left-0 top-full z-40 mt-1 w-48 rounded-xl border border-ui bg-surface p-2.5 shadow-lg"
-                >
+              {tablePickerOpen &&
+                createPortal(
+                  <div
+                    ref={tablePickerRef}
+                    role="dialog"
+                    aria-label="Insert table size"
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") setTablePickerOpen(false);
+                    }}
+                    className="fixed z-50 w-48 rounded-xl border border-ui bg-surface p-2.5 shadow-lg"
+                    style={{
+                      left: tablePickerPosition?.left ?? 0,
+                      top: tablePickerPosition?.top ?? 0,
+                      visibility: tablePickerPosition ? "visible" : "hidden",
+                    }}
+                  >
                   {([
                     {
                       label: "Columns",
@@ -1914,8 +2324,9 @@ export default function DocumentMaker({ onClose }: Props) {
                   >
                     Insert Table
                   </button>
-                </div>
-              )}
+                  </div>,
+                  document.body,
+                )}
             </div>
             </div>
             <MoreToolbarMenu
@@ -1933,7 +2344,7 @@ export default function DocumentMaker({ onClose }: Props) {
               onTableRowsChange={setTableRows}
               onTableColumnsChange={setTableColumns}
               onInsertTable={insertConfiguredTable}
-              onTextColorChange={(color) => activeEditor?.chain().focus().setColor(color).run()}
+              textColorPicker={textColorPicker}
             />
             <ToolbarButton
               label={isDownloading ? "Creating export" : "Preview and export"}
@@ -2252,6 +2663,65 @@ export default function DocumentMaker({ onClose }: Props) {
             setMessage("Page layout updated.");
           }}
         />
+      )}
+      {linkDialogOpen && (
+        <DialogFrame
+          labelledBy="document-link-title"
+          panelClassName="w-full max-w-md rounded-2xl bg-surface p-5 shadow-2xl"
+          onBackdropDismiss={closeLinkDialog}
+          backdropDismissOn="mouseDown"
+        >
+          <h2 id="document-link-title" className="mb-4 text-lg font-bold text-ink-primary">
+            Insert or edit link
+          </h2>
+          <form onSubmit={applyLink}>
+            <label className="block text-sm font-medium text-ink-secondary" htmlFor="document-link-url">
+              Web address
+            </label>
+            <InputField
+              id="document-link-url"
+              autoFocus
+              type="url"
+              required
+              value={linkHref}
+              onChange={(event) => {
+                setLinkHref(event.target.value);
+                setLinkError("");
+              }}
+              placeholder="https://example.com"
+              className="mt-1 w-full"
+            />
+            {linkError && (
+              <p role="alert" className="mt-2 text-sm text-danger">
+                {linkError}
+              </p>
+            )}
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              {linkIsEditing && (
+                <button
+                  type="button"
+                  onClick={removeLink}
+                  className="mr-auto rounded-lg border border-ui px-3 py-2 text-sm font-semibold text-danger hover:bg-surface-subtle"
+                >
+                  Remove link
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={closeLinkDialog}
+                className="rounded-lg border border-ui px-3 py-2 text-sm font-semibold text-ink-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="rounded-lg bg-action px-3 py-2 text-sm font-semibold text-ink-inverse"
+              >
+                {linkIsEditing ? "Update link" : "Add link"}
+              </button>
+            </div>
+          </form>
+        </DialogFrame>
       )}
       {findReplaceOpen && (
         <DocumentFindReplaceDialog

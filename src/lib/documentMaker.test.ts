@@ -95,6 +95,7 @@ describe("document maker typing helpers", () => {
   });
 
   it("uses the chosen paper dimensions and orientation", () => {
+    expect(DEFAULT_DOCUMENT_MAKER_LAYOUT.pageNumbers).toBe(false);
     expect(getDocumentMakerPageDimensions(DEFAULT_DOCUMENT_MAKER_LAYOUT)).toMatchObject({
       widthMm: 210,
       heightMm: 297,
@@ -162,6 +163,7 @@ describe("document maker typing helpers", () => {
         orientation: "landscape",
         header: "Company name",
         footer: "Confidential",
+        pageNumbers: true,
       },
     );
     expect(html).toContain("@page { size:297mm 210mm");

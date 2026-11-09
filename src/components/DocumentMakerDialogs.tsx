@@ -14,6 +14,7 @@ import type { DocumentMakerLayout } from "../lib/documentMaker";
 import type { SavedDocumentMakerDocument } from "../lib/documentMakerStorage";
 import type { DocumentMakerTemplate } from "../lib/documentMakerTemplates";
 import DialogFrame from "./DialogFrame";
+import Dropdown from "./Dropdown";
 import InputField from "./InputField";
 
 interface DialogProps {
@@ -156,29 +157,39 @@ export function DocumentLayoutDialog({
         <button type="button" aria-label="Close page layout" onClick={onClose}><X className="h-5 w-5 text-ink-muted" /></button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs font-semibold text-ink-secondary">
-          Paper size
-          <select
+        <div>
+          <label htmlFor="document-paper-size" className="text-xs font-semibold text-ink-secondary">
+            Paper size
+          </label>
+          <Dropdown
+            id="document-paper-size"
+            aria-label="Paper size"
             value={draft.paperSize}
-            onChange={(event) => setDraft((current) => ({ ...current, paperSize: event.target.value as DocumentMakerLayout["paperSize"] }))}
-            className="mt-1 block w-full rounded-lg border border-ui bg-surface px-3 py-2 text-sm text-ink-primary"
-          >
-            <option value="A4">A4</option>
-            <option value="Letter">US Letter</option>
-            <option value="Legal">US Legal</option>
-          </select>
-        </label>
-        <label className="text-xs font-semibold text-ink-secondary">
-          Orientation
-          <select
+            onChange={(value) => setDraft((current) => ({ ...current, paperSize: value as DocumentMakerLayout["paperSize"] }))}
+            className="mt-1"
+            options={[
+              { value: "A4", label: "A4" },
+              { value: "Letter", label: "US Letter" },
+              { value: "Legal", label: "US Legal" },
+            ]}
+          />
+        </div>
+        <div>
+          <label htmlFor="document-orientation" className="text-xs font-semibold text-ink-secondary">
+            Orientation
+          </label>
+          <Dropdown
+            id="document-orientation"
+            aria-label="Orientation"
             value={draft.orientation}
-            onChange={(event) => setDraft((current) => ({ ...current, orientation: event.target.value as DocumentMakerLayout["orientation"] }))}
-            className="mt-1 block w-full rounded-lg border border-ui bg-surface px-3 py-2 text-sm text-ink-primary"
-          >
-            <option value="portrait">Portrait</option>
-            <option value="landscape">Landscape</option>
-          </select>
-        </label>
+            onChange={(value) => setDraft((current) => ({ ...current, orientation: value as DocumentMakerLayout["orientation"] }))}
+            className="mt-1"
+            options={[
+              { value: "portrait", label: "Portrait" },
+              { value: "landscape", label: "Landscape" },
+            ]}
+          />
+        </div>
       </div>
       <fieldset className="mt-4">
         <legend className="text-xs font-semibold text-ink-secondary">Margins (mm)</legend>

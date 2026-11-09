@@ -45,12 +45,13 @@ function createPdfPage(
     ? `<div class="document-header">${escapeHtml(layout.header)}</div>`
     : "";
   const footer = layout.footer || layout.pageNumbers
-    ? `<div class="document-footer"><span>${escapeHtml(layout.footer)}</span><span>${layout.pageNumbers ? `${pageNumber} / ${pageCount}` : ""}</span></div>`
+    ? `<div class="document-footer"><span>${escapeHtml(layout.footer)}</span>${layout.pageNumbers ? `<span class="document-page-number">${pageNumber} / ${pageCount}</span><span></span>` : ""}</div>`
     : "";
   const styles = document.createElement("style");
   styles.textContent = `
     .document-header { position:absolute; top:12px; left:${layout.margins.left * 96 / 25.4}px; right:${layout.margins.right * 96 / 25.4}px; color:#475569; font-size:12px; }
-    .document-footer { position:absolute; bottom:12px; left:${layout.margins.left * 96 / 25.4}px; right:${layout.margins.right * 96 / 25.4}px; display:flex; justify-content:space-between; color:#475569; font-size:12px; }
+    .document-footer { position:absolute; bottom:12px; left:${layout.margins.left * 96 / 25.4}px; right:${layout.margins.right * 96 / 25.4}px; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; color:#475569; font-size:12px; }
+    .document-page-number { grid-column:2; }
     p { margin: 0 0 9px; }
     h1 { margin: 0 0 16px; font-size: 28px; line-height: 1.25; }
     h2 { margin: 0 0 14px; font-size: 22px; line-height: 1.3; }
@@ -435,8 +436,9 @@ export async function generateDocumentMakerPdf(
     footer: layout.footer || layout.pageNumbers
       ? (currentPage: number, pageCount: number) => ({
           columns: [
-            { text: layout.footer, alignment: "left" },
-            { text: layout.pageNumbers ? `${currentPage} / ${pageCount}` : "", alignment: "right" },
+            { text: layout.footer, alignment: "left", width: "*" },
+            { text: layout.pageNumbers ? `${currentPage} / ${pageCount}` : "", alignment: "center", width: "auto" },
+            { text: "", width: "*" },
           ],
           margin: [mmToPt(layout.margins.left), 0, mmToPt(layout.margins.right), 8],
           fontSize: 9,

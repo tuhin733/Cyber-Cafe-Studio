@@ -22,7 +22,7 @@ export const DEFAULT_DOCUMENT_MAKER_LAYOUT: DocumentMakerLayout = {
   margins: { top: 25, right: 25, bottom: 25, left: 25 },
   header: "",
   footer: "",
-  pageNumbers: true,
+  pageNumbers: false,
 };
 
 export function getDocumentMakerContentInsets(layout: DocumentMakerLayout) {

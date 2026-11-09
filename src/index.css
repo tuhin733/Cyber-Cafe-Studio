@@ -444,8 +444,13 @@
 
 .document-maker-page-footer {
   bottom: 8px;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+.document-maker-page-number {
+  grid-column: 2;
 }
 
 .document-maker-page-break {
