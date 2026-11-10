@@ -27,9 +27,6 @@
     "@tiptap/extension-link": "^3.33.0",
     "@tiptap/extension-placeholder": "^3.33.0",
     "@tiptap/extension-table": "^3.33.0",
-    "@tiptap/extension-table-cell": "^3.33.0",
-    "@tiptap/extension-table-header": "^3.33.0",
-    "@tiptap/extension-table-row": "^3.33.0",
     "@tiptap/extension-text-align": "^3.33.0",
     "@tiptap/extension-text-style": "^3.33.0",
     "@tiptap/extension-underline": "^3.33.0",
@@ -45,7 +42,6 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
     "pdfmake": "^0.2.23",
-    "polotno": "^3.19.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-konva": "^18.2.16"
