@@ -17,8 +17,6 @@
 
 - **Doc Stitch:** Arrange and resize images on A4 pages, then export or print documents.
 - **Document Maker:** Create and recover documents with local autosave and a document library; use formal-letter, application, résumé, invoice, and meeting-note templates; edit page size, orientation, margins, page breaks, headers, footers, and page numbers; find and replace; insert links, colored/highlighted text, freely position and proportionally resize images, and add tables; import/export DOCX and preview/export selectable-text PDFs. English, Bangla, and Hindi typing support, installed fonts, and saved font uploads are also available.
-- **Application Maker:** Build applications from 81 school, workplace, banking, government, residential, police, and legal templates; fill in your details and copy or download the result in English, Bangla, or Hindi.
-- **Resume Maker:** Create a resume with classic, modern, or minimal templates, preview it live, and print or download a text copy.
 - **Passport Photo Maker:** Create passport and ID photo sheets with configurable sizes and print layouts.
 - **Image Tools:** Crop, resize, compress, and convert photos and signatures.
 - **PDF Tools:** Merge and split PDFs, compress and convert files, organize and edit pages, and protect or unlock PDFs.
