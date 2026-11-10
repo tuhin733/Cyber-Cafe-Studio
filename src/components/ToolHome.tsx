@@ -4,7 +4,6 @@ import {
   Crop,
   FileArchive,
   FileText,
-  GraduationCap,
   Files,
   FileImage,
   FileLock2,
@@ -32,7 +31,6 @@ interface Props {
   onOpenDocumentEditor: () => void;
   onOpenDocumentMaker: () => void;
   onOpenBiodataResumeMaker: () => void;
-  onOpenSchoolProjectCoverMaker: () => void;
   onOpenPassportPhotoMaker: () => void;
   onOpenPhotoSignatureMaker: () => void;
   onOpenBackgroundRemover: () => void;
@@ -61,13 +59,6 @@ const tools = [
     description: "Create personal biodata for any purpose or a job resume, then export a PDF.",
     action: "Create a resume",
     Icon: FileText,
-  },
-  {
-    id: "school-project-cover",
-    title: "School Project Cover Maker",
-    description: "Design a personalized school project cover and export it as a print-ready PDF.",
-    action: "Make a cover",
-    Icon: GraduationCap,
   },
   {
     id: "passport",
@@ -222,7 +213,6 @@ export default function ToolHome({
   onOpenDocumentEditor,
   onOpenDocumentMaker,
   onOpenBiodataResumeMaker,
-  onOpenSchoolProjectCoverMaker,
   onOpenPassportPhotoMaker,
   onOpenPhotoSignatureMaker,
   onOpenBackgroundRemover,
@@ -242,7 +232,6 @@ export default function ToolHome({
     if (toolId === "documents") onOpenDocumentEditor();
     if (toolId === "document-maker") onOpenDocumentMaker();
     if (toolId === "biodata-resume") onOpenBiodataResumeMaker();
-    if (toolId === "school-project-cover") onOpenSchoolProjectCoverMaker();
     if (toolId === "passport") onOpenPassportPhotoMaker();
     if (toolId === "photo-signature") onOpenPhotoSignatureMaker();
     if (toolId === "background") onOpenBackgroundRemover();
