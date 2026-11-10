@@ -1066,6 +1066,50 @@ export default function ImageTools({
     notifyUserSuccess("Image downloaded.");
   };
 
+  const keyboardShortcutsRef = useRef({
+    downloadResult,
+    isLoading,
+    isProcessing,
+    processImage,
+    result,
+    source,
+  });
+  keyboardShortcutsRef.current = {
+    downloadResult,
+    isLoading,
+    isProcessing,
+    processImage,
+    result,
+    source,
+  };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.repeat) return;
+      const current = keyboardShortcutsRef.current;
+
+      switch (event.key.toLowerCase()) {
+        case "o":
+          event.preventDefault();
+          fileInputRef.current?.click();
+          break;
+        case "enter":
+          event.preventDefault();
+          if (current.source && !current.isLoading && !current.isProcessing) {
+            void current.processImage();
+          }
+          break;
+        case "s":
+          event.preventDefault();
+          if (current.result && !current.isProcessing) current.downloadResult();
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
   const tabs: Array<{ id: ToolMode; label: string; caption: string; icon: LucideIcon }> = [
     { id: "resize", label: "Resize", caption: "Dimensions & DPI", icon: Scaling },
     { id: "crop", label: "Crop", caption: "Frame the image", icon: Crop },
@@ -1123,11 +1167,14 @@ export default function ImageTools({
   return (
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-muted">
       <header className="flex shrink-0 items-center px-4 py-3 sm:px-6">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3">
           <BackToToolsButton
             onClick={onClose}
             toolName={lockedMode ? TOOL_TITLES[lockedMode] : "Image Tools"}
           />
+          <p className="text-[10px] text-ink-muted sm:text-xs">
+            Ctrl/Cmd+O upload · Ctrl/Cmd+Enter process · Ctrl/Cmd+S download
+          </p>
         </div>
       </header>
 

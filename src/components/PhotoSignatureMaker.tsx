@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, CalendarDays, ImagePlus, PenLine, UserRound } from "lucide-react";
 import BackToToolsButton from "./BackToToolsButton";
+import AutoSaveStatusIndicator from "./AutoSaveStatusIndicator";
 import { getThemeColor } from "../theme/theme";
 import { notifyUserError } from "../lib/userErrors";
 import { notifyUserSuccess } from "../lib/userNotifications";
+import { useToolAutoSave } from "../hooks/useToolAutoSave";
 
 interface LoadedImage {
   file: File;
@@ -13,9 +15,26 @@ interface LoadedImage {
 
 type CaptionMode = "signature" | "name-date";
 
+interface PhotoSignatureSession {
+  version: 1;
+  photoFile: File | null;
+  signatureFile: File | null;
+  mode: CaptionMode;
+  name: string;
+  date: string;
+}
+
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_IMAGE_PIXELS = 100_000_000;
 const OUTPUT_WIDTH = 1200;
 const MAX_OUTPUT_HEIGHT = 16_000;
+
+function isValidImageFile(file: unknown): file is File {
+  return file instanceof File &&
+    file.type.startsWith("image/") &&
+    file.size > 0 &&
+    file.size <= MAX_UPLOAD_BYTES;
+}
 
 function loadImage(file: File): Promise<LoadedImage> {
   return new Promise((resolve, reject) => {
@@ -140,6 +159,62 @@ export default function PhotoSignatureMaker({ onClose }: { onClose: () => void }
   const photoRequestRef = useRef(0);
   const signatureRequestRef = useRef(0);
 
+  const restoreSession = useCallback(async (saved: PhotoSignatureSession) => {
+    if (
+      saved.version !== 1 ||
+      (saved.photoFile !== null && !isValidImageFile(saved.photoFile)) ||
+      (saved.signatureFile !== null && !isValidImageFile(saved.signatureFile)) ||
+      (saved.mode !== "signature" && saved.mode !== "name-date") ||
+      typeof saved.name !== "string" ||
+      typeof saved.date !== "string"
+    ) {
+      throw new Error("The saved Photo + Signature session is invalid.");
+    }
+
+    let restoredPhoto: LoadedImage | null = null;
+    let restoredSignature: LoadedImage | null = null;
+    try {
+      if (saved.photoFile) restoredPhoto = await loadImage(saved.photoFile);
+      if (saved.signatureFile) restoredSignature = await loadImage(saved.signatureFile);
+      if (
+        [restoredPhoto, restoredSignature].some(
+          (image) => image && image.image.naturalWidth * image.image.naturalHeight > MAX_IMAGE_PIXELS,
+        )
+      ) {
+        throw new Error("A saved image exceeds the supported pixel limit.");
+      }
+    } catch (restoreError) {
+      if (restoredPhoto) URL.revokeObjectURL(restoredPhoto.url);
+      if (restoredSignature) URL.revokeObjectURL(restoredSignature.url);
+      throw restoreError;
+    }
+
+    if (photoRef.current) URL.revokeObjectURL(photoRef.current.url);
+    if (signatureRef.current) URL.revokeObjectURL(signatureRef.current.url);
+    photoRef.current = restoredPhoto;
+    signatureRef.current = restoredSignature;
+    setPhoto(restoredPhoto);
+    setSignature(restoredSignature);
+    setMode(saved.mode);
+    setName(saved.name);
+    setDate(saved.date);
+  }, []);
+
+  const autosaveSnapshot = useMemo<PhotoSignatureSession>(() => ({
+    version: 1,
+    photoFile: photo?.file ?? null,
+    signatureFile: signature?.file ?? null,
+    mode,
+    name,
+    date,
+  }), [date, mode, name, photo, signature]);
+  const autoSave = useToolAutoSave(
+    "photo-signature-maker",
+    autosaveSnapshot,
+    restoreSession,
+    !isExporting,
+  );
+
   useEffect(() => () => {
     photoRequestRef.current += 1;
     signatureRequestRef.current += 1;
@@ -216,20 +291,50 @@ export default function PhotoSignatureMaker({ onClose }: { onClose: () => void }
     }
   };
 
+  const keyboardShortcutsRef = useRef({ downloadImage, isExporting });
+  keyboardShortcutsRef.current = { downloadImage, isExporting };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.altKey ||
+        event.repeat ||
+        event.key.toLowerCase() !== "s"
+      ) return;
+
+      event.preventDefault();
+      const current = keyboardShortcutsRef.current;
+      if (!current.isExporting) void current.downloadImage();
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
   return (
     <main className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto bg-surface-muted">
       <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-7 sm:py-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <BackToToolsButton onClick={onClose} toolName="Photo + Signature / Name & Date" />
-          <button
-            type="button"
-            onClick={() => void downloadImage()}
-            disabled={isExporting}
-            className="inline-flex items-center gap-2 rounded-xl bg-action px-4 py-2.5 text-sm font-semibold text-ink-inverse shadow-sm transition hover:bg-action-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-emphasis disabled:cursor-wait disabled:opacity-60"
-          >
-            <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
-            {isExporting ? "Creating image…" : "Download PNG"}
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <AutoSaveStatusIndicator
+              status={autoSave.status}
+              lastSavedAt={autoSave.lastSavedAt}
+              onRetry={autoSave.retry}
+            />
+            <button
+              type="button"
+              onClick={() => void downloadImage()}
+              disabled={isExporting}
+              className="inline-flex items-center gap-2 rounded-xl bg-action px-4 py-2.5 text-sm font-semibold text-ink-inverse shadow-sm transition hover:bg-action-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-emphasis disabled:cursor-wait disabled:opacity-60"
+              title="Download PNG (Ctrl/Cmd+S)"
+            >
+              <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+              {isExporting ? "Creating image…" : "Download PNG"}
+              <span className="text-[10px] opacity-80">Ctrl/Cmd+S</span>
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 grid items-start gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">

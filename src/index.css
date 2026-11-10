@@ -25,6 +25,10 @@
   background-image: var(--theme-home-background);
 }
 
+.tool-search-input::-webkit-search-cancel-button {
+  display: none;
+}
+
 .app-window-controls button {
   display: flex;
   width: 46px;

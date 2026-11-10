@@ -422,6 +422,61 @@ export default function PhotoBackgroundRemover({
     }
   };
 
+  const keyboardShortcutsRef = useRef({
+    downloadResult,
+    isLoadingImage,
+    isMagicBrushActive,
+    isRemovingBackground,
+    isSavingImage,
+    removeBackground,
+    result,
+    source,
+  });
+  keyboardShortcutsRef.current = {
+    downloadResult,
+    isLoadingImage,
+    isMagicBrushActive,
+    isRemovingBackground,
+    isSavingImage,
+    removeBackground,
+    result,
+    source,
+  };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.repeat) return;
+      const current = keyboardShortcutsRef.current;
+
+      switch (event.key.toLowerCase()) {
+        case "o":
+          event.preventDefault();
+          if (!current.isRemovingBackground && !current.isLoadingImage) {
+            fileInputRef.current?.click();
+          }
+          break;
+        case "enter":
+          event.preventDefault();
+          if (
+            current.source &&
+            !current.isRemovingBackground &&
+            !current.isLoadingImage &&
+            !current.isMagicBrushActive
+          ) {
+            void current.removeBackground();
+          }
+          break;
+        case "s":
+          event.preventDefault();
+          if (current.result && !current.isSavingImage) void current.downloadResult();
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
   const sendToPassportMaker = async () => {
     if (!result || !source) return;
     setIsSavingImage(true);
@@ -615,10 +670,13 @@ export default function PhotoBackgroundRemover({
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex min-h-full w-full max-w-6xl flex-col px-4 py-5 sm:px-6">
-        <div className="sticky top-0 z-10 -mx-4 -mt-5 mb-5 flex items-center justify-between gap-3 bg-surface-muted/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="sticky top-0 z-10 -mx-4 -mt-5 mb-5 flex flex-wrap items-center justify-between gap-3 bg-surface-muted/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
           <div className="flex items-center gap-3">
             <BackToToolsButton onClick={onClose} toolName="Photo Background Remover" />
           </div>
+          <p className="text-[10px] text-ink-muted sm:text-xs">
+            Ctrl/Cmd+O upload · Ctrl/Cmd+Enter remove · Ctrl/Cmd+S download
+          </p>
         </div>
 
         <div className="grid flex-1 items-start gap-4 min-[850px]:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.7fr)]">

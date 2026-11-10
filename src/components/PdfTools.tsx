@@ -937,6 +937,42 @@ export default function PdfTools({
     }
   };
 
+  const keyboardShortcutsRef = useRef({
+    canProcess,
+    isProcessing,
+    previewSelection,
+    process,
+  });
+  keyboardShortcutsRef.current = {
+    canProcess,
+    isProcessing,
+    previewSelection,
+    process,
+  };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      const current = keyboardShortcutsRef.current;
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.altKey ||
+        event.repeat ||
+        current.previewSelection
+      ) return;
+
+      if (event.key.toLowerCase() === "o") {
+        event.preventDefault();
+        if (!current.isProcessing) inputRef.current?.click();
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        if (current.canProcess) void current.process();
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
   return (
     <>
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-muted">
@@ -1027,6 +1063,9 @@ export default function PdfTools({
               <div className="min-w-0">
                 <h1 className="truncate text-base font-bold text-ink-primary">{selectedOperation.title}</h1>
                 <p className="mt-0.5 text-xs leading-5 text-ink-muted">{selectedOperation.description}</p>
+                <p className="mt-1 text-[10px] text-ink-muted sm:text-xs">
+                  Ctrl/Cmd+O add files · Ctrl/Cmd+Enter process
+                </p>
               </div>
             </div>
             <span className="hidden shrink-0 rounded-full bg-surface-subtle px-2.5 py-1 text-[10px] font-semibold text-ink-muted sm:inline-flex">

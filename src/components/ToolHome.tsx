@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Crop,
@@ -14,6 +14,8 @@ import {
   ListOrdered,
   LockKeyholeOpen,
   PenLine,
+  Pin,
+  PinOff,
   Rocket,
   Search,
   Scissors,
@@ -23,9 +25,11 @@ import {
   RotateCw,
   RefreshCw,
   Scaling,
+  X,
 } from "lucide-react";
 import type { ImageToolMode } from "./ImageTools";
 import type { PdfOperation } from "./PdfTools";
+import { notifyUserError } from "../lib/userErrors";
 
 interface Props {
   onOpenDocumentEditor: () => void;
@@ -209,6 +213,11 @@ const tools = [
   },
 ] as const;
 
+type Tool = (typeof tools)[number];
+type ToolId = Tool["id"];
+
+const PINNED_TOOLS_STORAGE_KEY = "cyber-cafe-studio-pinned-tools-v1";
+
 export default function ToolHome({
   onOpenDocumentEditor,
   onOpenDocumentMaker,
@@ -220,13 +229,64 @@ export default function ToolHome({
   onOpenPdfTool,
 }: Props) {
   const [query, setQuery] = useState("");
-  const visibleTools = useMemo(() => {
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [pinnedToolIds, setPinnedToolIds] = useState<ToolId[]>(() => {
+    try {
+      const stored = window.localStorage.getItem(PINNED_TOOLS_STORAGE_KEY);
+      if (!stored) return [];
+      const parsed: unknown = JSON.parse(stored);
+      if (!Array.isArray(parsed)) return [];
+      return [...new Set(parsed.filter(
+        (id): id is ToolId => tools.some((tool) => tool.id === id),
+      ))];
+    } catch (error) {
+      console.error("Unable to load pinned tools.", error);
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        PINNED_TOOLS_STORAGE_KEY,
+        JSON.stringify(pinnedToolIds),
+      );
+    } catch (error) {
+      console.error("Unable to save pinned tools.", error);
+      notifyUserError("Pinned tools couldn't be saved on this device.");
+    }
+  }, [pinnedToolIds]);
+
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
+
+  const filteredTools = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return tools;
     return tools.filter((tool) =>
       `${tool.title} ${tool.description}`.toLowerCase().includes(normalizedQuery),
     );
   }, [query]);
+  const pinnedToolIdSet = useMemo(() => new Set(pinnedToolIds), [pinnedToolIds]);
+  const isSearching = query.trim().length > 0;
+  const pinnedTools = filteredTools.filter((tool) => pinnedToolIdSet.has(tool.id));
+  const otherTools = filteredTools.filter((tool) => !pinnedToolIdSet.has(tool.id));
+
+  const togglePinnedTool = (toolId: ToolId) => {
+    setPinnedToolIds((current) =>
+      current.includes(toolId)
+        ? current.filter((id) => id !== toolId)
+        : [...current, toolId],
+    );
+  };
 
   const openTool = (toolId: (typeof tools)[number]["id"]) => {
     if (toolId === "documents") onOpenDocumentEditor();
@@ -254,6 +314,60 @@ export default function ToolHome({
     if (toolId === "pdf-protect") onOpenPdfTool("protect");
     if (toolId === "pdf-unlock") onOpenPdfTool("unlock");
   };
+
+  const renderToolCards = (toolList: readonly Tool[]) =>
+    toolList.map(({ id, title, description, action, Icon }) => {
+      const isPinned = pinnedToolIdSet.has(id);
+      return (
+        <article
+          key={id}
+          className="group flex min-h-56 flex-col rounded-2xl border border-ui bg-surface p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-action-border-strong hover:shadow-lg hover:shadow-ink-primary/5"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-action-subtle text-action">
+              <Icon className="h-5 w-5" strokeWidth={1.8} aria-hidden="true" />
+            </span>
+            <button
+              type="button"
+              onClick={() => togglePinnedTool(id)}
+              aria-label={isPinned ? `Unpin ${title}` : `Pin ${title}`}
+              aria-pressed={isPinned}
+              title={isPinned ? "Unpin tool" : "Pin tool"}
+              className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action ${
+                isPinned
+                  ? "border-action-border bg-action-subtle text-action"
+                  : "border-transparent text-ink-muted hover:border-ui hover:bg-surface-subtle hover:text-ink-primary"
+              }`}
+            >
+              {isPinned ? (
+                <PinOff className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Pin className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => openTool(id)}
+            className="group/open mt-4 flex flex-1 flex-col items-start text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
+          >
+            <span className="text-base font-semibold tracking-tight text-ink-primary">
+              {title}
+            </span>
+            <span className="mt-2 text-sm leading-6 text-ink-secondary">
+              {description}
+            </span>
+            <span className="mt-auto inline-flex items-center gap-2 pt-5 text-sm font-semibold text-action">
+              {action}
+              <ArrowRight
+                className="h-4 w-4 transition-transform group-hover/open:translate-x-1"
+                aria-hidden="true"
+              />
+            </span>
+          </button>
+        </article>
+      );
+    });
 
   return (
     <main className="app-home-background scrollbar-hidden relative min-h-0 flex-1 overflow-y-auto bg-fixed">
@@ -287,62 +401,81 @@ export default function ToolHome({
 
         </div>
 
-        <label className="sticky top-4 z-10 mx-auto mt-7 flex w-full max-w-2xl items-center gap-3 rounded-2xl border border-ui bg-surface px-5 py-4 text-left shadow-sm transition duration-200 focus-within:border-action focus-within:shadow-md focus-within:shadow-action/10 focus-within:ring-4 focus-within:ring-action-subtle/70">
-          <Search className="h-5 w-5 shrink-0 text-action" aria-hidden="true" />
-          <span className="sr-only">Search tools</span>
+        <div
+          role="search"
+          className="group sticky top-4 z-10 mx-auto mt-7 flex w-full max-w-2xl items-center gap-3 rounded-2xl border border-ui bg-surface/95 px-4 py-3 text-left shadow-lg shadow-ink-primary/5 backdrop-blur transition duration-200 hover:border-ui-strong focus-within:border-action-emphasis focus-within:shadow-xl focus-within:shadow-action/10 focus-within:ring-4 focus-within:ring-action-soft/70 sm:gap-4 sm:px-5 sm:py-3.5"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-subtle text-ink-muted transition-colors group-focus-within:bg-action-subtle group-focus-within:text-action">
+            <Search className="h-4 w-4" aria-hidden="true" />
+          </span>
           <input
+            ref={searchInputRef}
+            aria-label="Search tools"
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search tools, documents, photos, images, and PDFs..."
-            className="w-full bg-transparent text-sm text-ink-primary outline-none placeholder:text-ink-muted sm:text-base"
+            placeholder="Search tools by name or task..."
+            className="tool-search-input min-w-0 flex-1 bg-transparent py-2 text-sm text-ink-primary outline-none placeholder:text-ink-muted sm:text-base"
           />
-        </label>
+          {query ? (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                searchInputRef.current?.focus();
+              }}
+              aria-label="Clear search"
+              title="Clear search"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-muted transition hover:bg-surface-subtle hover:text-ink-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : (
+            <kbd className="hidden shrink-0 items-center rounded-md border border-ui bg-surface-muted px-2 py-1 font-sans text-[11px] font-medium text-ink-muted shadow-sm sm:inline-flex">
+              Ctrl K
+            </kbd>
+          )}
+        </div>
 
         <section
           className="mx-auto mt-10 w-full max-w-6xl sm:mt-12"
           aria-label="Available tools"
         >
-          <div className="mb-4 flex items-center gap-2">
-            <h2 className="text-lg font-semibold tracking-tight text-ink-primary">
-              Explore your tools
-            </h2>
-            <span className="rounded-full bg-surface-subtle px-2.5 py-1 text-xs font-medium text-ink-secondary">
-              {visibleTools.length}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {visibleTools.map(({ id, title, description, action, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => openTool(id)}
-                className="group flex min-h-56 flex-col items-start rounded-2xl border border-ui bg-surface p-5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-action-border-strong hover:shadow-lg hover:shadow-ink-primary/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-action-subtle text-action">
-                  <Icon className="h-5 w-5" strokeWidth={1.8} aria-hidden="true" />
+          {!isSearching && pinnedTools.length > 0 && (
+            <div className="mb-8">
+              <div className="mb-4 flex items-center gap-2">
+                <h2 className="text-lg font-semibold tracking-tight text-ink-primary">
+                  Pinned tools
+                </h2>
+                <span className="rounded-full bg-action-subtle px-2.5 py-1 text-xs font-medium text-action">
+                  {pinnedTools.length}
                 </span>
-                <span className="mt-4 text-base font-semibold tracking-tight text-ink-primary">
-                  {title}
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {renderToolCards(pinnedTools)}
+              </div>
+            </div>
+          )}
+          {(isSearching || otherTools.length > 0) && (
+            <>
+              <div className="mb-4 flex items-center gap-2">
+                <h2 className="text-lg font-semibold tracking-tight text-ink-primary">
+                  {isSearching ? "Search results" : "Explore your tools"}
+                </h2>
+                <span className="rounded-full bg-surface-subtle px-2.5 py-1 text-xs font-medium text-ink-secondary">
+                  {isSearching ? filteredTools.length : otherTools.length}
                 </span>
-                <span className="mt-2 text-sm leading-6 text-ink-secondary">
-                  {description}
-                </span>
-                <span className="mt-auto inline-flex items-center gap-2 pt-5 text-sm font-semibold text-action">
-                  {action}
-                  <ArrowRight
-                    className="h-4 w-4 transition-transform group-hover:translate-x-1"
-                    aria-hidden="true"
-                  />
-                </span>
-              </button>
-            ))}
-            {visibleTools.length === 0 && (
-              <p className="col-span-full rounded-2xl border border-dashed border-ui-strong bg-surface px-6 py-10 text-center text-sm text-ink-muted">
-                No tools found. Try a different search.
-              </p>
-            )}
-          </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {renderToolCards(isSearching ? filteredTools : otherTools)}
+                {filteredTools.length === 0 && (
+                  <p className="col-span-full rounded-2xl border border-dashed border-ui-strong bg-surface px-6 py-10 text-center text-sm text-ink-muted">
+                    No tools found. Try a different search.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
         </section>
 
         <footer className="mx-auto mt-8 flex items-center justify-center gap-2 text-sm text-ink-muted">

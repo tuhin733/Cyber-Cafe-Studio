@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
   BriefcaseBusiness,
@@ -22,6 +22,8 @@ import {
 import { savePDF } from "../lib/pdf";
 import { notifyUserError } from "../lib/userErrors";
 import { notifyUserSuccess } from "../lib/userNotifications";
+import { useToolAutoSave } from "../hooks/useToolAutoSave";
+import AutoSaveStatusIndicator from "./AutoSaveStatusIndicator";
 
 interface Props {
   onClose: () => void;
@@ -47,6 +49,14 @@ const emptyData: BiodataResumeData = {
   about: "",
   additionalDetails: "",
 };
+const dataFields = Object.keys(emptyData) as (keyof BiodataResumeData)[];
+
+interface BiodataResumeSession {
+  version: 1;
+  templateId: BiodataResumeTemplate;
+  templateStyles: Record<BiodataResumeTemplate, BiodataResumeStyle>;
+  data: BiodataResumeData;
+}
 
 const templateStyleOptions = BIODATA_RESUME_STYLES.map(({ id, name }) => ({
   value: id,
@@ -134,6 +144,36 @@ export default function BiodataResumeMaker({ onClose }: Props) {
   });
   const [data, setData] = useState<BiodataResumeData>(emptyData);
   const [isExporting, setIsExporting] = useState(false);
+  const restoreSession = useCallback(async (saved: BiodataResumeSession) => {
+    const validStyles = BIODATA_RESUME_STYLES.map(({ id }) => id);
+    const validTemplates = BIODATA_RESUME_TEMPLATES.map(({ id }) => id);
+    if (
+      saved.version !== 1 ||
+      !validTemplates.includes(saved.templateId) ||
+      !saved.templateStyles ||
+      !validTemplates.every((id) => validStyles.includes(saved.templateStyles[id])) ||
+      !saved.data ||
+      !dataFields.every((field) => typeof saved.data[field] === "string")
+    ) {
+      throw new Error("The saved Biodata & Resume session is invalid.");
+    }
+
+    setTemplateId(saved.templateId);
+    setTemplateStyles(saved.templateStyles);
+    setData(saved.data);
+  }, []);
+  const autosaveSnapshot = useMemo<BiodataResumeSession>(() => ({
+    version: 1,
+    templateId,
+    templateStyles,
+    data,
+  }), [data, templateId, templateStyles]);
+  const autoSave = useToolAutoSave(
+    "biodata-resume-maker",
+    autosaveSnapshot,
+    restoreSession,
+    !isExporting,
+  );
   const template = BIODATA_RESUME_TEMPLATES.find(
     ({ id }) => id === templateId,
   );
@@ -181,6 +221,27 @@ export default function BiodataResumeMaker({ onClose }: Props) {
     }
   };
 
+  const keyboardShortcutsRef = useRef({ exportPdf, isExporting });
+  keyboardShortcutsRef.current = { exportPdf, isExporting };
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.altKey ||
+        event.repeat ||
+        event.key.toLowerCase() !== "s"
+      ) return;
+
+      event.preventDefault();
+      const current = keyboardShortcutsRef.current;
+      if (!current.isExporting) void current.exportPdf();
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
   const contactLine = [data.phone, data.email, data.address]
     .map((item) => item.trim())
     .filter(Boolean)
@@ -199,15 +260,24 @@ export default function BiodataResumeMaker({ onClose }: Props) {
       <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-7 sm:py-7">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <BackToToolsButton onClick={onClose} toolName={template.name} />
-          <button
-            type="button"
-            onClick={() => void exportPdf()}
-            disabled={isExporting}
-            className="inline-flex items-center gap-2 rounded-xl bg-action px-4 py-2.5 text-sm font-semibold text-ink-inverse shadow-sm transition hover:bg-action-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-emphasis disabled:cursor-wait disabled:opacity-60"
-          >
-            <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
-            {isExporting ? "Creating PDF…" : "Create PDF"}
-          </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <AutoSaveStatusIndicator
+              status={autoSave.status}
+              lastSavedAt={autoSave.lastSavedAt}
+              onRetry={autoSave.retry}
+            />
+            <button
+              type="button"
+              onClick={() => void exportPdf()}
+              disabled={isExporting}
+              className="inline-flex items-center gap-2 rounded-xl bg-action px-4 py-2.5 text-sm font-semibold text-ink-inverse shadow-sm transition hover:bg-action-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action-emphasis disabled:cursor-wait disabled:opacity-60"
+              title="Create PDF (Ctrl/Cmd+S)"
+            >
+              <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+              {isExporting ? "Creating PDF…" : "Create PDF"}
+              <span className="text-[10px] opacity-80">Ctrl/Cmd+S</span>
+            </button>
+          </div>
         </div>
 
         <section
