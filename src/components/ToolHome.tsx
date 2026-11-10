@@ -6,7 +6,6 @@ import {
   FileStack,
   Image,
   ImageMinus,
-  PenTool,
   Rocket,
   Search,
   SquareUserRound,
@@ -21,7 +20,6 @@ interface Props {
   onOpenBackgroundRemover: () => void;
   onOpenImageTools: () => void;
   onOpenPdfTools: () => void;
-  onOpenDesignStudio: () => void;
 }
 
 const tools = [
@@ -75,13 +73,6 @@ const tools = [
     Icon: FileStack,
   },
   {
-    id: "design-studio",
-    title: "Design Studio",
-    description: "Create social graphics, posters, and custom designs on a flexible canvas.",
-    action: "Start designing",
-    Icon: PenTool,
-  },
-  {
     id: "background",
     title: "Background Remover",
     description: "Remove or replace the background in a portrait.",
@@ -99,7 +90,6 @@ export default function ToolHome({
   onOpenBackgroundRemover,
   onOpenImageTools,
   onOpenPdfTools,
-  onOpenDesignStudio,
 }: Props) {
   const [query, setQuery] = useState("");
   const visibleTools = useMemo(() => {
@@ -119,7 +109,6 @@ export default function ToolHome({
     if (toolId === "background") onOpenBackgroundRemover();
     if (toolId === "image-tools") onOpenImageTools();
     if (toolId === "pdf-tools") onOpenPdfTools();
-    if (toolId === "design-studio") onOpenDesignStudio();
   };
 
   return (

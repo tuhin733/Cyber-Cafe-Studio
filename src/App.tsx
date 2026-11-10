@@ -19,7 +19,6 @@ import {
   ImageMinus,
   Minus,
   Newspaper,
-  PenTool,
   Square,
   SquareUserRound,
   Copy,
@@ -57,7 +56,6 @@ const PdfTools = lazy(() => import("./components/PdfTools"));
 const DocumentMaker = lazy(() => import("./components/DocumentMaker"));
 const ApplicationMaker = lazy(() => import("./components/ApplicationMaker"));
 const ResumeMaker = lazy(() => import("./components/ResumeMaker"));
-const DesignStudio = lazy(() => import("./components/DesignStudio"));
 
 function App() {
   const {
@@ -111,7 +109,6 @@ function App() {
   const [showDocumentMaker, setShowDocumentMaker] = useState(false);
   const [showApplicationMaker, setShowApplicationMaker] = useState(false);
   const [showResumeMaker, setShowResumeMaker] = useState(false);
-  const [showDesignStudio, setShowDesignStudio] = useState(false);
   const [passportPhoto, setPassportPhoto] = useState<File | null>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
@@ -133,7 +130,6 @@ function App() {
 
   const openDocumentEditor = () => {
     setIsHomeScreen(false);
-    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowApplicationMaker(false);
     setShowResumeMaker(false);
@@ -145,7 +141,6 @@ function App() {
 
   const openPassportPhotoMaker = () => {
     setIsHomeScreen(false);
-    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowApplicationMaker(false);
     setShowResumeMaker(false);
@@ -157,7 +152,6 @@ function App() {
 
   const openBackgroundRemover = () => {
     setIsHomeScreen(false);
-    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowApplicationMaker(false);
     setShowResumeMaker(false);
@@ -169,7 +163,6 @@ function App() {
 
   const openImageTools = () => {
     setIsHomeScreen(false);
-    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowApplicationMaker(false);
     setShowResumeMaker(false);
@@ -181,7 +174,6 @@ function App() {
 
   const openPdfTools = () => {
     setIsHomeScreen(false);
-    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowApplicationMaker(false);
     setShowResumeMaker(false);
@@ -193,7 +185,6 @@ function App() {
 
   const openDocumentMaker = () => {
     setIsHomeScreen(false);
-    setShowDesignStudio(false);
     setShowApplicationMaker(false);
     setShowResumeMaker(false);
     setShowDocumentMaker(true);
@@ -205,7 +196,6 @@ function App() {
 
   const openApplicationMaker = () => {
     setIsHomeScreen(false);
-    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowApplicationMaker(true);
     setShowResumeMaker(false);
@@ -217,7 +207,6 @@ function App() {
 
   const openResumeMaker = () => {
     setIsHomeScreen(false);
-    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowApplicationMaker(false);
     setShowResumeMaker(true);
@@ -227,21 +216,8 @@ function App() {
     setShowPdfTools(false);
   };
 
-  const openDesignStudio = () => {
-    setIsHomeScreen(false);
-    setShowDesignStudio(true);
-    setShowDocumentMaker(false);
-    setShowApplicationMaker(false);
-    setShowResumeMaker(false);
-    setShowPassportPhotoMaker(false);
-    setShowPhotoBackgroundRemover(false);
-    setShowImageTools(false);
-    setShowPdfTools(false);
-  };
-
   const returnToHome = () => {
     setIsHomeScreen(true);
-    setShowDesignStudio(false);
     setShowDocumentMaker(false);
     setShowApplicationMaker(false);
     setShowResumeMaker(false);
@@ -485,7 +461,6 @@ function App() {
         showDocumentMaker ||
         showApplicationMaker ||
         showResumeMaker ||
-        showDesignStudio ||
         !(event.ctrlKey || event.metaKey)
       ) return;
 
@@ -505,7 +480,6 @@ function App() {
     showDocumentMaker,
     showApplicationMaker,
     showResumeMaker,
-    showDesignStudio,
   ]);
 
   return (
@@ -539,7 +513,6 @@ function App() {
                     !showDocumentMaker &&
                     !showApplicationMaker &&
                     !showResumeMaker &&
-                    !showDesignStudio &&
                     !showPassportPhotoMaker &&
                     !showPhotoBackgroundRemover &&
                     !showImageTools) ||
@@ -549,8 +522,7 @@ function App() {
                   showPdfTools ||
                   showDocumentMaker ||
                   showApplicationMaker ||
-                  showResumeMaker ||
-                  showDesignStudio
+                  showResumeMaker
                     ? "bg-action-emphasis text-ink-inverse"
                     : "bg-action-subtle text-action hover:bg-action-soft"
                 }`}
@@ -579,7 +551,6 @@ function App() {
                       !showDocumentMaker &&
                       !showApplicationMaker &&
                       !showResumeMaker &&
-                      !showDesignStudio &&
                       !showPassportPhotoMaker &&
                       !showPhotoBackgroundRemover &&
                       !showImageTools &&
@@ -657,23 +628,6 @@ function App() {
                       </span>
                       <span className="mt-0.5 block text-[11px] text-ink-muted">
                         Create a resume from ready-made layouts
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-current={showDesignStudio ? "page" : undefined}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
-                    onClick={() => {
-                      openDesignStudio();
-                      setShowToolsMenu(false);
-                    }}
-                  >
-                    <PenTool className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold text-ink-primary">Design Studio</span>
-                      <span className="mt-0.5 block text-[11px] text-ink-muted">
-                        Create social graphics and custom designs
                       </span>
                     </span>
                   </button>
@@ -859,18 +813,7 @@ function App() {
             onOpenBackgroundRemover={openBackgroundRemover}
             onOpenImageTools={openImageTools}
             onOpenPdfTools={openPdfTools}
-            onOpenDesignStudio={openDesignStudio}
           />
-        ) : showDesignStudio ? (
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center bg-surface-muted text-sm font-medium text-ink-muted">
-                Loading Design Studio…
-              </div>
-            }
-          >
-            <DesignStudio onClose={returnToHome} />
-          </Suspense>
         ) : showDocumentMaker ? (
           <Suspense
             fallback={
