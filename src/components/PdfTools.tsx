@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   ArrowDownToLine,
   ChevronLeft,
@@ -10,6 +17,7 @@ import {
   FileImage,
   FileLock2,
   Files,
+  Eraser,
   Hash,
   Image,
   LoaderCircle,
@@ -17,6 +25,7 @@ import {
   LockKeyholeOpen,
   RotateCw,
   Scissors,
+  Stamp,
   Trash2,
   UploadCloud,
   X,
@@ -29,8 +38,10 @@ import { useToolAutoSave } from "../hooks/useToolAutoSave";
 import { notifyUserSuccess } from "../lib/userNotifications";
 import {
   addPageNumbers,
+  addPdfWatermark,
   compressPdfFile,
   cropPdfFile,
+  deletePdfPages,
   downloadPdfOutput,
   imagesToPdf,
   mergePdfFiles,
@@ -39,24 +50,31 @@ import {
   parsePageRanges,
   pdfToImages,
   protectPdfFile,
+  removePdfWatermarks,
+  removeFlattenedWatermarkRegion,
   renderPdfPagePreview,
   renderPdfPageThumbnails,
   rotatePdfFile,
   splitPdfFile,
   unlockPdfFile,
   type PdfOutput,
+  type PdfWatermarkPosition,
+  type PdfWatermarkRegion,
 } from "../lib/pdfTools";
 
-type PdfOperation =
+export type PdfOperation =
   | "merge"
   | "split"
   | "compress"
   | "image-to-pdf"
   | "pdf-to-image"
   | "organize"
+  | "delete-pages"
   | "rotate"
   | "crop"
   | "page-numbers"
+  | "add-watermark"
+  | "remove-watermark"
   | "protect"
   | "unlock";
 
@@ -72,12 +90,15 @@ const OPERATIONS: {
   { id: "merge", title: "Merge PDF", description: "Combine PDF files in your chosen order.", group: "Organize", Icon: Files, multiple: true },
   { id: "split", title: "Split PDF", description: "Save each page range as a separate PDF.", group: "Organize", Icon: Scissors, multiple: false },
   { id: "organize", title: "Organize Pages", description: "Reorder pages by entering their page numbers.", group: "Organize", Icon: ListOrdered, multiple: false },
+  { id: "delete-pages", title: "Delete Pages", description: "Remove selected pages and keep the rest of the PDF.", group: "Organize", Icon: Trash2, multiple: false },
   { id: "image-to-pdf", title: "Image to PDF", description: "Put each selected image on its own PDF page.", group: "Convert", Icon: Image, multiple: true, images: true },
   { id: "pdf-to-image", title: "PDF to Image", description: "Export every page as a high-resolution PNG image.", group: "Convert", Icon: FileImage, multiple: false },
   { id: "compress", title: "Compress PDF", description: "Reduce file size by rasterizing pages; text will no longer be selectable.", group: "Edit", Icon: FileArchive, multiple: false },
   { id: "rotate", title: "Rotate PDF", description: "Rotate every page by the selected angle.", group: "Edit", Icon: RotateCw, multiple: false },
   { id: "crop", title: "Crop PDF", description: "Set an equal crop margin on all four sides.", group: "Edit", Icon: Crop, multiple: false },
   { id: "page-numbers", title: "Add Page Numbers", description: "Add page and total-page numbers to each page.", group: "Edit", Icon: Hash, multiple: false },
+  { id: "add-watermark", title: "Add Watermark", description: "Stamp custom text across every PDF page.", group: "Edit", Icon: Stamp, multiple: false },
+  { id: "remove-watermark", title: "Remove Watermark", description: "Remove watermark annotations, find text marks, or cover a selected area.", group: "Edit", Icon: Eraser, multiple: false },
   { id: "protect", title: "Protect PDF", description: "Encrypt the PDF with an AES-256 opening password.", group: "Security", Icon: FileLock2, multiple: false },
   { id: "unlock", title: "Unlock PDF", description: "Remove PDF passwords; AES-128 files are exported as flattened pages.", group: "Security", Icon: LockKeyholeOpen, multiple: false },
 ];
@@ -108,6 +129,19 @@ interface PdfToolsSession {
   cropMargin: number;
   quality: number;
   readyOutputs: PdfOutput[];
+  watermarkText?: string;
+  watermarkOpacity?: number;
+  watermarkType?: "text" | "image";
+  watermarkImage?: File | null;
+  watermarkPosition?: PdfWatermarkPosition;
+  watermarkSize?: number;
+  watermarkRotation?: number;
+  watermarkPages?: string;
+  watermarkColor?: string;
+  watermarkRemovalMode?: "annotations" | "text-match" | "flattened-region";
+  watermarkRemovalRegion?: PdfWatermarkRegion | null;
+  watermarkMatchText?: string;
+  watermarkRemovalFillColor?: string;
 }
 
 interface FilePreviewSelection {
@@ -375,11 +409,40 @@ function FilePreviewDialog({
 
 const PDF_OPERATION_IDS = OPERATIONS.map(({ id }) => id);
 
-export default function PdfTools({ onClose }: { onClose: () => void }) {
-  const [operation, setOperation] = useState<PdfOperation>("merge");
+export default function PdfTools({
+  onClose,
+  initialOperation,
+  lockedOperation,
+}: {
+  onClose: () => void;
+  initialOperation?: PdfOperation;
+  lockedOperation?: PdfOperation;
+}) {
+  const [operation, setOperation] = useState<PdfOperation>(
+    lockedOperation ?? initialOperation ?? "merge",
+  );
   const [files, setFiles] = useState<File[]>([]);
   const [pageRanges, setPageRanges] = useState("");
   const [pageOrder, setPageOrder] = useState("");
+  const [watermarkText, setWatermarkText] = useState("SAMPLE");
+  const [watermarkOpacity, setWatermarkOpacity] = useState(0.2);
+  const [watermarkType, setWatermarkType] = useState<"text" | "image">("text");
+  const [watermarkImage, setWatermarkImage] = useState<File | null>(null);
+  const [watermarkPosition, setWatermarkPosition] = useState<PdfWatermarkPosition>("diagonal");
+  const [watermarkSize, setWatermarkSize] = useState(55);
+  const [watermarkRotation, setWatermarkRotation] = useState(0);
+  const [watermarkPages, setWatermarkPages] = useState("");
+  const [watermarkColor, setWatermarkColor] = useState("#595959");
+  const [watermarkRemovalMode, setWatermarkRemovalMode] =
+    useState<"annotations" | "text-match" | "flattened-region">("annotations");
+  const [watermarkRemovalRegion, setWatermarkRemovalRegion] =
+    useState<PdfWatermarkRegion | null>(null);
+  const [watermarkMatchText, setWatermarkMatchText] = useState("");
+  const [watermarkRemovalPreview, setWatermarkRemovalPreview] = useState("");
+  const [watermarkRemovalPreviewError, setWatermarkRemovalPreviewError] = useState("");
+  const [watermarkRemovalPreviewLoading, setWatermarkRemovalPreviewLoading] = useState(false);
+  const [watermarkRemovalFillColor, setWatermarkRemovalFillColor] = useState("#ffffff");
+  const removalDragStartRef = useRef<{ x: number; y: number } | null>(null);
   const [rotation, setRotation] = useState(90);
   const [cropMargin, setCropMargin] = useState(5);
   const [quality, setQuality] = useState(60);
@@ -413,10 +476,49 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
     if (
       saved.version !== 1 ||
       !PDF_OPERATION_IDS.includes(saved.operation) ||
+      (lockedOperation !== undefined && saved.operation !== lockedOperation) ||
       !Array.isArray(saved.files) ||
       !saved.files.every((file) => file instanceof File) ||
       typeof saved.pageRanges !== "string" ||
       typeof saved.pageOrder !== "string" ||
+      (saved.watermarkText !== undefined && typeof saved.watermarkText !== "string") ||
+      (saved.watermarkOpacity !== undefined &&
+        (!Number.isFinite(saved.watermarkOpacity) ||
+          saved.watermarkOpacity < 0.05 ||
+          saved.watermarkOpacity > 0.8)) ||
+      (saved.watermarkType !== undefined &&
+        saved.watermarkType !== "text" && saved.watermarkType !== "image") ||
+      (saved.watermarkImage !== undefined &&
+        saved.watermarkImage !== null && !(saved.watermarkImage instanceof File)) ||
+      (saved.watermarkPosition !== undefined &&
+        !["center", "top-left", "top-right", "bottom-left", "bottom-right", "diagonal"]
+          .includes(saved.watermarkPosition)) ||
+      (saved.watermarkSize !== undefined &&
+        (!Number.isFinite(saved.watermarkSize) || saved.watermarkSize < 10 || saved.watermarkSize > 80)) ||
+      (saved.watermarkRotation !== undefined &&
+        (!Number.isFinite(saved.watermarkRotation) ||
+          saved.watermarkRotation < -90 || saved.watermarkRotation > 90)) ||
+      (saved.watermarkPages !== undefined && typeof saved.watermarkPages !== "string") ||
+      (saved.watermarkColor !== undefined &&
+        !/^#?[\da-f]{6}$/i.test(saved.watermarkColor)) ||
+      (saved.watermarkRemovalMode !== undefined &&
+        saved.watermarkRemovalMode !== "annotations" &&
+        saved.watermarkRemovalMode !== "text-match" &&
+        saved.watermarkRemovalMode !== "flattened-region") ||
+      (saved.watermarkMatchText !== undefined &&
+        (typeof saved.watermarkMatchText !== "string" || saved.watermarkMatchText.length > 100)) ||
+      (saved.watermarkRemovalFillColor !== undefined &&
+        !/^#?[\da-f]{6}$/i.test(saved.watermarkRemovalFillColor)) ||
+      (saved.watermarkRemovalRegion !== undefined &&
+        saved.watermarkRemovalRegion !== null &&
+        (![saved.watermarkRemovalRegion.x, saved.watermarkRemovalRegion.y,
+          saved.watermarkRemovalRegion.width, saved.watermarkRemovalRegion.height].every(Number.isFinite) ||
+          saved.watermarkRemovalRegion.x < 0 ||
+          saved.watermarkRemovalRegion.y < 0 ||
+          saved.watermarkRemovalRegion.width <= 0 ||
+          saved.watermarkRemovalRegion.height <= 0 ||
+          saved.watermarkRemovalRegion.x + saved.watermarkRemovalRegion.width > 1 ||
+          saved.watermarkRemovalRegion.y + saved.watermarkRemovalRegion.height > 1)) ||
       ![90, 180, 270].includes(saved.rotation) ||
       !Number.isFinite(saved.cropMargin) ||
       saved.cropMargin < 0 ||
@@ -445,6 +547,19 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
     setFiles(saved.files);
     setPageRanges(saved.pageRanges);
     setPageOrder(saved.pageOrder);
+    setWatermarkText(saved.watermarkText ?? "SAMPLE");
+    setWatermarkOpacity(saved.watermarkOpacity ?? 0.2);
+    setWatermarkType(saved.watermarkType ?? "text");
+    setWatermarkImage(saved.watermarkImage ?? null);
+    setWatermarkPosition(saved.watermarkPosition ?? "diagonal");
+    setWatermarkSize(saved.watermarkSize ?? 55);
+    setWatermarkRotation(saved.watermarkRotation ?? 0);
+    setWatermarkPages(saved.watermarkPages ?? "");
+    setWatermarkColor(saved.watermarkColor ?? "#595959");
+    setWatermarkRemovalMode(saved.watermarkRemovalMode ?? "annotations");
+    setWatermarkRemovalRegion(saved.watermarkRemovalRegion ?? null);
+    setWatermarkMatchText(saved.watermarkMatchText ?? "");
+    setWatermarkRemovalFillColor(saved.watermarkRemovalFillColor ?? "#ffffff");
     setRotation(saved.rotation);
     setCropMargin(saved.cropMargin);
     setQuality(saved.quality);
@@ -452,7 +567,7 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
     setPassword("");
     setPasswordConfirm("");
     setError("");
-  }, []);
+  }, [lockedOperation]);
 
   const autosaveSnapshot = useMemo<PdfToolsSession>(() => ({
     version: 1,
@@ -464,6 +579,19 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
     cropMargin,
     quality,
     readyOutputs,
+    watermarkText,
+    watermarkOpacity,
+    watermarkType,
+    watermarkImage,
+    watermarkPosition,
+    watermarkSize,
+    watermarkRotation,
+    watermarkPages,
+    watermarkColor,
+    watermarkRemovalMode,
+    watermarkRemovalRegion,
+    watermarkMatchText,
+    watermarkRemovalFillColor,
   }), [
     cropMargin,
     files,
@@ -473,9 +601,22 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
     quality,
     readyOutputs,
     rotation,
+    watermarkOpacity,
+    watermarkType,
+    watermarkImage,
+    watermarkPosition,
+    watermarkSize,
+    watermarkRotation,
+    watermarkPages,
+    watermarkColor,
+    watermarkRemovalMode,
+    watermarkRemovalRegion,
+    watermarkMatchText,
+    watermarkRemovalFillColor,
+    watermarkText,
   ]);
   const autoSave = useToolAutoSave(
-    "pdf-tools",
+    `pdf-tools-${lockedOperation ?? "all"}`,
     autosaveSnapshot,
     restoreSession,
     !isProcessing,
@@ -485,6 +626,12 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
     files.length > 0 &&
     (!needsMultiple || files.length > 1) &&
     !isProcessing &&
+    (operation !== "add-watermark" ||
+      (watermarkType === "text" ? Boolean(watermarkText.trim()) : Boolean(watermarkImage))) &&
+    (operation !== "remove-watermark" ||
+      watermarkRemovalMode === "annotations" ||
+      (watermarkRemovalMode === "text-match" && Boolean(watermarkMatchText.trim())) ||
+      (watermarkRemovalMode === "flattened-region" && watermarkRemovalRegion !== null)) &&
     (!isPasswordOperation(operation) || Boolean(password)) &&
     !passwordMismatch;
 
@@ -511,6 +658,7 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
         ? [...current, ...valid]
         : valid.slice(0, 1));
       setReadyOutputs([]);
+      setWatermarkRemovalRegion(null);
     }
     setError(allValid
       ? ""
@@ -520,6 +668,83 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
     setReadyOutputs([]);
     if (inputRef.current) inputRef.current.value = "";
   };
+
+  useEffect(() => {
+    const file = files[0];
+    if (operation !== "remove-watermark" || watermarkRemovalMode !== "flattened-region" || !file) {
+      setWatermarkRemovalPreview("");
+      setWatermarkRemovalPreviewError("");
+      setWatermarkRemovalPreviewLoading(false);
+      return;
+    }
+
+    let active = true;
+    setWatermarkRemovalPreview("");
+    setWatermarkRemovalPreviewError("");
+    setWatermarkRemovalPreviewLoading(true);
+    void renderPdfPagePreview(file, 1, 0.8)
+      .then((preview) => {
+        if (active) setWatermarkRemovalPreview(preview);
+      })
+      .catch((previewError: unknown) => {
+        console.error(`Unable to preview ${file.name} for watermark cleanup`, previewError);
+        if (active) {
+          setWatermarkRemovalPreviewError(previewError instanceof Error
+            ? previewError.message
+            : "The PDF page preview could not be loaded.");
+        }
+      })
+      .finally(() => {
+        if (active) setWatermarkRemovalPreviewLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [files, operation, watermarkRemovalMode]);
+
+  const getWatermarkRegionPoint = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)),
+      y: Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height)),
+    };
+  };
+  const startWatermarkRegion = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!watermarkRemovalPreview) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const point = getWatermarkRegionPoint(event);
+    removalDragStartRef.current = point;
+    setWatermarkRemovalRegion({ ...point, width: 0.005, height: 0.005 });
+    setReadyOutputs([]);
+  };
+  const moveWatermarkRegion = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = removalDragStartRef.current;
+    if (!start) return;
+    const point = getWatermarkRegionPoint(event);
+    const x = Math.min(start.x, point.x);
+    const y = Math.min(start.y, point.y);
+    setWatermarkRemovalRegion({
+      x,
+      y,
+      width: Math.min(1 - x, Math.max(0.005, Math.abs(point.x - start.x))),
+      height: Math.min(1 - y, Math.max(0.005, Math.abs(point.y - start.y))),
+    });
+  };
+  const finishWatermarkRegion = () => {
+    removalDragStartRef.current = null;
+  };
+
+  useEffect(() => {
+    const requestedOperation = lockedOperation ?? initialOperation;
+    if (requestedOperation && autoSave.isLoaded && operation !== requestedOperation) {
+      setOperation(requestedOperation);
+      setFiles([]);
+      setReadyOutputs([]);
+      setPassword("");
+      setPasswordConfirm("");
+      setError("");
+    }
+  }, [autoSave.isLoaded, initialOperation, lockedOperation, operation]);
 
   const process = async () => {
     if (!canProcess) return;
@@ -534,11 +759,85 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
         case "merge":
           outputs = [pdfOutput(await mergePdfFiles(files), "merged.pdf")];
           break;
+        case "add-watermark":
+          {
+            const { PDFDocument } = await import("pdf-lib");
+            const source = await PDFDocument.load(await file.arrayBuffer());
+            const selectedPages = watermarkPages.trim()
+              ? parsePageRanges(watermarkPages, source.getPageCount()).flat()
+              : undefined;
+          outputs = [pdfOutput(
+            await addPdfWatermark(file, {
+              type: watermarkType,
+              text: watermarkText,
+              image: watermarkImage,
+              opacity: watermarkOpacity,
+              position: watermarkPosition,
+              size: watermarkSize,
+              rotation: watermarkRotation,
+              pages: selectedPages,
+              color: watermarkColor,
+            }),
+            `${baseName(file.name)}-watermarked.pdf`,
+          )];
+          break;
+          }
+        case "remove-watermark":
+          if (watermarkRemovalMode === "flattened-region") {
+            if (!watermarkRemovalRegion) {
+              throw new Error("Draw a selection around the flattened watermark area first.");
+            }
+            {
+              const { PDFDocument } = await import("pdf-lib");
+              const source = await PDFDocument.load(await file.arrayBuffer());
+              const selectedPages = watermarkPages.trim()
+                ? parsePageRanges(watermarkPages, source.getPageCount()).flat()
+                : undefined;
+              outputs = [pdfOutput(
+                await removeFlattenedWatermarkRegion(file, {
+                  region: watermarkRemovalRegion,
+                  pages: selectedPages,
+                  fillColor: watermarkRemovalFillColor,
+                }),
+                `${baseName(file.name)}-watermark-area-cleaned.pdf`,
+              )];
+            }
+          } else if (watermarkRemovalMode === "text-match") {
+            const { PDFDocument } = await import("pdf-lib");
+            const source = await PDFDocument.load(await file.arrayBuffer());
+            const selectedPages = watermarkPages.trim()
+              ? parsePageRanges(watermarkPages, source.getPageCount()).flat()
+              : undefined;
+            outputs = [pdfOutput(
+              await removeFlattenedWatermarkRegion(file, {
+                text: watermarkMatchText,
+                pages: selectedPages,
+                fillColor: watermarkRemovalFillColor,
+              }),
+              `${baseName(file.name)}-watermark-text-cleaned.pdf`,
+            )];
+          } else {
+            outputs = [pdfOutput(
+              await removePdfWatermarks(file),
+              `${baseName(file.name)}-watermark-removed.pdf`,
+            )];
+          }
+          break;
         case "split": {
           const { PDFDocument } = await import("pdf-lib");
           const source = await PDFDocument.load(await file.arrayBuffer());
           const ranges = parsePageRanges(pageRanges, source.getPageCount());
           outputs = await splitPdfFile(file, ranges);
+          break;
+        }
+        case "delete-pages": {
+          const { PDFDocument } = await import("pdf-lib");
+          const source = await PDFDocument.load(await file.arrayBuffer());
+          const pages = parsePageRanges(pageRanges, source.getPageCount()).flat();
+          outputs = [pdfOutput(
+            await deletePdfPages(file, pages),
+            `${baseName(file.name)}-pages-deleted.pdf`,
+          )];
           break;
         }
         case "compress":
@@ -613,9 +912,16 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
           case "image-to-pdf": return "Images converted to PDF.";
           case "pdf-to-image": return `Exported ${outputs.length} PDF pages as images.`;
           case "organize": return "PDF pages reordered.";
+          case "delete-pages": return "Selected PDF pages deleted.";
           case "rotate": return "PDF rotated.";
           case "crop": return "PDF cropped.";
           case "page-numbers": return "Page numbers added.";
+          case "add-watermark": return "Watermark added.";
+          case "remove-watermark": return watermarkRemovalMode === "flattened-region"
+            ? "Selected watermark area covered; PDF pages were rasterized."
+            : watermarkRemovalMode === "text-match"
+              ? "Matching PDF text covered; PDF pages were rasterized."
+              : "Removable watermark annotations removed.";
           case "protect": return "PDF protected.";
           case "unlock": return completionNote
             ? "PDF unlocked; pages were flattened."
@@ -636,7 +942,10 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-muted">
       <header className="flex shrink-0 items-center border-b border-ui bg-surface px-4 py-3 sm:px-6">
         <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3">
-          <BackToToolsButton onClick={onClose} toolName="PDF Tools" />
+          <BackToToolsButton
+            onClick={onClose}
+            toolName={lockedOperation ? selectedOperation.title : "PDF Tools"}
+          />
           <AutoSaveStatusIndicator
             status={autoSave.status}
             lastSavedAt={autoSave.lastSavedAt}
@@ -645,7 +954,13 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
         </div>
       </header>
 
-      <div className="mx-auto grid min-h-0 w-full max-w-7xl flex-1 grid-cols-1 auto-rows-max gap-3 overflow-y-auto p-3 sm:gap-4 sm:p-4 min-[1000px]:auto-rows-fr min-[1000px]:grid-cols-[230px_minmax(0,1fr)_290px] min-[1000px]:overflow-hidden">
+      <div className={`mx-auto grid min-h-0 w-full max-w-7xl flex-1 grid-cols-1 auto-rows-max gap-3 overflow-y-auto p-3 sm:gap-4 sm:p-4 min-[1000px]:auto-rows-fr min-[1000px]:overflow-hidden ${
+        lockedOperation
+          ? "min-[1000px]:grid-cols-[minmax(0,1fr)_290px]"
+          : "min-[1000px]:grid-cols-[230px_minmax(0,1fr)_290px]"
+      }`}>
+        {!lockedOperation && (
+          <>
         <nav
           aria-label="PDF operations"
           className="flex gap-2 overflow-x-auto rounded-2xl border border-ui bg-surface p-2 min-[1000px]:hidden"
@@ -700,6 +1015,8 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         </aside>
+          </>
+        )}
 
         <section className="flex min-h-72 flex-col overflow-hidden rounded-2xl border border-ui bg-surface shadow-sm min-[1000px]:min-h-0">
           <div className="flex shrink-0 items-start justify-between gap-3 border-b border-ui-subtle px-4 py-3 sm:px-5">
@@ -865,6 +1182,151 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
               </section>
             )}
 
+            {operation === "delete-pages" && (
+              <label className="block text-xs font-semibold text-ink-secondary">
+                Pages to delete
+                <input
+                  value={pageRanges}
+                  onChange={(event) => setPageRanges(event.target.value)}
+                  placeholder="For example: 2, 4-5"
+                  className="mt-1.5 w-full rounded-lg border border-ui-strong bg-surface px-3 py-2.5 text-sm font-normal text-ink-primary outline-none focus:border-action focus:ring-2 focus:ring-action-subtle"
+                />
+                <span className="mt-1.5 block text-[11px] font-normal leading-4 text-ink-muted">
+                  Enter pages or ranges to remove. At least one page must remain.
+                </span>
+              </label>
+            )}
+
+            {operation === "remove-watermark" && (
+              <div className="space-y-4">
+                <label className="block text-xs font-semibold text-ink-secondary">
+                  Removal method
+                  <select
+                    value={watermarkRemovalMode}
+                    onChange={(event) => {
+                      setWatermarkRemovalMode(
+                        event.target.value as "annotations" | "text-match" | "flattened-region",
+                      );
+                      setWatermarkRemovalRegion(null);
+                      setReadyOutputs([]);
+                      setError("");
+                    }}
+                    className="mt-1.5 w-full rounded-lg border border-ui-strong bg-surface px-3 py-2.5 text-sm font-normal text-ink-primary outline-none focus:border-action focus:ring-2 focus:ring-action-subtle"
+                  >
+                    <option value="annotations">Remove watermark annotations</option>
+                    <option value="text-match">Find and cover matching PDF text</option>
+                    <option value="flattened-region">Cover a flattened watermark area</option>
+                  </select>
+                </label>
+
+                {watermarkRemovalMode === "annotations" ? (
+                  <p className="rounded-xl border border-ui bg-surface-muted px-3 py-3 text-xs leading-5 text-ink-secondary">
+                    Removes PDF Watermark annotations, named Watermark stamps, and watermarks added by this app. It does not guess which ordinary page text or graphics are watermarks.
+                  </p>
+                ) : (
+                  <>
+                    <p className="rounded-xl border border-warning-border bg-warning-subtle px-3 py-3 text-xs leading-5 text-warning-strong">
+                      {watermarkRemovalMode === "text-match"
+                        ? "Enter the exact watermark wording. Matching selectable text is covered on chosen pages. This rasterizes every page and cannot restore content hidden beneath the watermark."
+                        : "Drag over the watermark on page 1. The selected rectangle is covered on chosen pages. This rasterizes every page and cannot restore content hidden beneath the watermark."}
+                    </p>
+                    {watermarkRemovalMode === "text-match" && (
+                      <label className="block text-xs font-semibold text-ink-secondary">
+                        Watermark text to find
+                        <input
+                          value={watermarkMatchText}
+                          maxLength={100}
+                          onChange={(event) => setWatermarkMatchText(event.target.value)}
+                          placeholder="For example: SAMPLE"
+                          className="mt-1.5 w-full rounded-lg border border-ui-strong bg-surface px-3 py-2.5 text-sm font-normal text-ink-primary outline-none focus:border-action focus:ring-2 focus:ring-action-subtle"
+                        />
+                      </label>
+                    )}
+                    <label className="block text-xs font-semibold text-ink-secondary">
+                      Pages to clean (optional)
+                      <input
+                        value={watermarkPages}
+                        onChange={(event) => setWatermarkPages(event.target.value)}
+                        placeholder="All pages, or e.g. 1, 3-5"
+                        className="mt-1.5 w-full rounded-lg border border-ui-strong bg-surface px-3 py-2.5 text-sm font-normal text-ink-primary outline-none focus:border-action focus:ring-2 focus:ring-action-subtle"
+                      />
+                      <span className="mt-1 block text-[11px] font-normal text-ink-muted">
+                        Leave blank to check every page.
+                      </span>
+                    </label>
+                    <label className="flex items-center justify-between gap-3 text-xs font-semibold text-ink-secondary">
+                      Cover color
+                      <input
+                        type="color"
+                        value={watermarkRemovalFillColor}
+                        onChange={(event) => setWatermarkRemovalFillColor(event.target.value)}
+                        aria-label="Watermark removal cover color"
+                        className="h-9 w-14 cursor-pointer rounded-md border border-ui bg-surface p-1"
+                      />
+                    </label>
+                    {watermarkRemovalMode === "flattened-region" && files.length > 0 && (
+                      <div>
+                        <p className="mb-2 text-xs font-semibold text-ink-secondary">
+                          Drag to select watermark area on page 1
+                        </p>
+                        {watermarkRemovalPreviewLoading ? (
+                          <div className="flex min-h-40 items-center justify-center rounded-xl border border-ui bg-surface-muted text-xs text-ink-muted">
+                            <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                            Rendering page preview…
+                          </div>
+                        ) : watermarkRemovalPreviewError ? (
+                          <p role="alert" className="rounded-lg bg-danger-subtle px-3 py-2 text-xs text-danger">
+                            {watermarkRemovalPreviewError}
+                          </p>
+                        ) : watermarkRemovalPreview ? (
+                          <div
+                            role="application"
+                            aria-label="Select the watermark area by dragging"
+                            onPointerDown={startWatermarkRegion}
+                            onPointerMove={moveWatermarkRegion}
+                            onPointerUp={finishWatermarkRegion}
+                            onPointerCancel={finishWatermarkRegion}
+                            className="relative mx-auto w-fit max-w-full touch-none cursor-crosshair overflow-hidden rounded-lg border border-ui bg-surface-muted"
+                          >
+                            <img
+                              src={watermarkRemovalPreview}
+                              alt="First PDF page. Drag over the watermark to select the area to cover."
+                              className="pointer-events-none block max-h-[34rem] max-w-full select-none object-contain"
+                              draggable={false}
+                            />
+                            {watermarkRemovalRegion && (
+                              <span
+                                aria-hidden="true"
+                                className="pointer-events-none absolute border-2 border-danger bg-danger/20"
+                                style={{
+                                  left: `${watermarkRemovalRegion.x * 100}%`,
+                                  top: `${watermarkRemovalRegion.y * 100}%`,
+                                  width: `${watermarkRemovalRegion.width * 100}%`,
+                                  height: `${watermarkRemovalRegion.height * 100}%`,
+                                }}
+                              />
+                            )}
+                          </div>
+                        ) : null}
+                        {watermarkRemovalRegion && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWatermarkRemovalRegion(null);
+                              setReadyOutputs([]);
+                            }}
+                            className="mt-2 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-action hover:bg-action-subtle"
+                          >
+                            Clear selection
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
           </div>
         </section>
 
@@ -879,6 +1341,138 @@ export default function PdfTools({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="space-y-4">
+            {operation === "add-watermark" && (
+              <div className="space-y-4">
+                <label className="block text-xs font-semibold text-ink-secondary">
+                  Watermark type
+                  <select
+                    value={watermarkType}
+                    onChange={(event) => setWatermarkType(event.target.value as "text" | "image")}
+                    className="mt-1.5 w-full rounded-lg border border-ui-strong bg-surface px-3 py-2.5 text-sm font-normal text-ink-primary outline-none focus:border-action focus:ring-2 focus:ring-action-subtle"
+                  >
+                    <option value="text">Text</option>
+                    <option value="image">Image or logo</option>
+                  </select>
+                </label>
+                {watermarkType === "text" ? (
+                  <>
+                    <label className="block text-xs font-semibold text-ink-secondary">
+                      Watermark text
+                      <input
+                        value={watermarkText}
+                        maxLength={100}
+                        onChange={(event) => setWatermarkText(event.target.value)}
+                        placeholder="For example: COPY"
+                        className="mt-1.5 w-full rounded-lg border border-ui-strong bg-surface px-3 py-2.5 text-sm font-normal text-ink-primary outline-none focus:border-action focus:ring-2 focus:ring-action-subtle"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between gap-3 text-xs font-semibold text-ink-secondary">
+                      Text color
+                      <input
+                        type="color"
+                        value={watermarkColor}
+                        onChange={(event) => setWatermarkColor(event.target.value)}
+                        aria-label="Watermark text color"
+                        className="h-9 w-14 cursor-pointer rounded-md border border-ui bg-surface p-1"
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <label className="block text-xs font-semibold text-ink-secondary">
+                    PNG or JPEG logo
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                      onChange={(event) => {
+                        const selected = event.currentTarget.files?.[0] ?? null;
+                        if (
+                          selected &&
+                          !["image/png", "image/jpeg"].includes(selected.type) &&
+                          !/\.(png|jpe?g)$/i.test(selected.name)
+                        ) {
+                          setWatermarkImage(null);
+                          setError("Choose a PNG or JPEG watermark image.");
+                          return;
+                        }
+                        setWatermarkImage(selected);
+                        setError("");
+                        setReadyOutputs([]);
+                      }}
+                      className="mt-1.5 block w-full text-xs text-ink-secondary file:mr-2 file:rounded-lg file:border-0 file:bg-action-subtle file:px-3 file:py-2 file:text-xs file:font-semibold file:text-action"
+                    />
+                    {watermarkImage && (
+                      <span className="mt-1 block truncate text-[11px] font-normal text-ink-muted">
+                        {watermarkImage.name}
+                      </span>
+                    )}
+                  </label>
+                )}
+                <label className="block text-xs font-semibold text-ink-secondary">
+                  Position
+                  <select
+                    value={watermarkPosition}
+                    onChange={(event) => setWatermarkPosition(event.target.value as PdfWatermarkPosition)}
+                    className="mt-1.5 w-full rounded-lg border border-ui-strong bg-surface px-3 py-2.5 text-sm font-normal text-ink-primary outline-none focus:border-action focus:ring-2 focus:ring-action-subtle"
+                  >
+                    <option value="diagonal">Diagonal center</option>
+                    <option value="center">Center</option>
+                    <option value="top-left">Top left</option>
+                    <option value="top-right">Top right</option>
+                    <option value="bottom-left">Bottom left</option>
+                    <option value="bottom-right">Bottom right</option>
+                  </select>
+                </label>
+                <label className="block text-xs font-semibold text-ink-secondary">
+                  Size <span className="text-action">{watermarkSize}%</span>
+                  <input
+                    type="range"
+                    min={10}
+                    max={80}
+                    value={watermarkSize}
+                    onChange={(event) => setWatermarkSize(Number(event.target.value))}
+                    className="mt-3 block w-full accent-action-emphasis"
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-ink-secondary">
+                  Rotation <span className="text-action">{watermarkRotation}°</span>
+                  <input
+                    type="range"
+                    min={-90}
+                    max={90}
+                    value={watermarkRotation}
+                    onChange={(event) => setWatermarkRotation(Number(event.target.value))}
+                    className="mt-3 block w-full accent-action-emphasis"
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-ink-secondary">
+                  Opacity <span className="text-action">{Math.round(watermarkOpacity * 100)}%</span>
+                  <input
+                    type="range"
+                    min={5}
+                    max={80}
+                    value={Math.round(watermarkOpacity * 100)}
+                    onChange={(event) => setWatermarkOpacity(Number(event.target.value) / 100)}
+                    className="mt-3 block w-full accent-action-emphasis"
+                  />
+                  <span className="mt-1 block text-[11px] font-normal leading-4 text-ink-muted">
+                    Adjust how strongly the watermark appears on the page.
+                  </span>
+                </label>
+                <label className="block text-xs font-semibold text-ink-secondary">
+                  Pages (optional)
+                  <input
+                    value={watermarkPages}
+                    onChange={(event) => setWatermarkPages(event.target.value)}
+                    placeholder="All pages, or e.g. 1, 3-5"
+                    className="mt-1.5 w-full rounded-lg border border-ui-strong bg-surface px-3 py-2.5 text-sm font-normal text-ink-primary outline-none focus:border-action focus:ring-2 focus:ring-action-subtle"
+                  />
+                  <span className="mt-1.5 block text-[11px] font-normal leading-4 text-ink-muted">
+                    Leave blank to watermark every page.
+                  </span>
+                </label>
+              </div>
+            )}
+
             {operation === "split" && (
               <label className="block text-xs font-semibold text-ink-secondary">
                 Page ranges

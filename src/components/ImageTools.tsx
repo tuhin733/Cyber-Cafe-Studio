@@ -44,7 +44,8 @@ import { useToolAutoSave } from "../hooks/useToolAutoSave";
 import AutoSaveStatusIndicator from "./AutoSaveStatusIndicator";
 import { notifyUserSuccess } from "../lib/userNotifications";
 
-type ToolMode = "resize" | "compress" | "convert" | "crop";
+export type ImageToolMode = "resize" | "compress" | "convert" | "crop";
+type ToolMode = ImageToolMode;
 type CompressionMode = "target" | "quality";
 interface LoadedImage {
   file: File;
@@ -89,6 +90,12 @@ const UPLOAD_COPY: Record<ToolMode, string> = {
   crop: "Upload image to crop",
   compress: "Upload image to compress",
   convert: "Upload image to convert",
+};
+const TOOL_TITLES: Record<ToolMode, string> = {
+  resize: "Photo & Signature Resizer",
+  crop: "Image Cropper",
+  compress: "Image Compressor",
+  convert: "Image Converter",
 };
 
 function loadImage(file: File): Promise<LoadedImage> {
@@ -305,10 +312,18 @@ function moveRectCropCorner(
   return next;
 }
 
-export default function ImageTools({ onClose }: { onClose: () => void }) {
+export default function ImageTools({
+  onClose,
+  initialMode,
+  lockedMode,
+}: {
+  onClose: () => void;
+  initialMode?: ImageToolMode;
+  lockedMode?: ImageToolMode;
+}) {
   const [source, setSource] = useState<LoadedImage | null>(null);
   const [result, setResult] = useState<ProcessedImage | null>(null);
-  const [mode, setMode] = useState<ToolMode>("resize");
+  const [mode, setMode] = useState<ToolMode>(lockedMode ?? initialMode ?? "resize");
   const [width, setWidth] = useState(413);
   const [height, setHeight] = useState(531);
   const [dpi, setDpi] = useState(300);
@@ -351,6 +366,7 @@ export default function ImageTools({ onClose }: { onClose: () => void }) {
       saved.version !== 1 ||
       (saved.sourceFile !== null && !(saved.sourceFile instanceof File)) ||
       !["resize", "crop", "compress", "convert"].includes(saved.mode) ||
+      (lockedMode !== undefined && saved.mode !== lockedMode) ||
       !isImageFormat(saved.format) ||
       (saved.result !== null &&
         (!(saved.result.blob instanceof Blob) ||
@@ -390,7 +406,7 @@ export default function ImageTools({ onClose }: { onClose: () => void }) {
     setQuality(saved.quality);
     setTargetKB(saved.targetKB);
     setCompressionMode(saved.compressionMode);
-  }, []);
+  }, [lockedMode]);
 
   const autosaveSnapshot = useMemo<ImageToolsSession>(() => ({
     version: 1,
@@ -442,11 +458,16 @@ export default function ImageTools({ onClose }: { onClose: () => void }) {
     width,
   ]);
   const autoSave = useToolAutoSave(
-    "image-tools",
+    `image-tools-${lockedMode ?? "all"}`,
     autosaveSnapshot,
     restoreSession,
     !isLoading && !isProcessing,
   );
+
+  useEffect(() => {
+    const requestedMode = lockedMode ?? initialMode;
+    if (requestedMode && autoSave.isLoaded) setMode(requestedMode);
+  }, [autoSave.isLoaded, initialMode, lockedMode]);
 
   useEffect(() => {
     return () => {
@@ -516,6 +537,7 @@ export default function ImageTools({ onClose }: { onClose: () => void }) {
   };
 
   const selectMode = (nextMode: ToolMode) => {
+    if (lockedMode && nextMode !== lockedMode) return;
     if (nextMode === mode) return;
     loadRequestRef.current += 1;
     processRequestRef.current += 1;
@@ -1102,13 +1124,16 @@ export default function ImageTools({ onClose }: { onClose: () => void }) {
     <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-muted">
       <header className="flex shrink-0 items-center px-4 py-3 sm:px-6">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
-          <BackToToolsButton onClick={onClose} toolName="Image Tools" />
+          <BackToToolsButton
+            onClick={onClose}
+            toolName={lockedMode ? TOOL_TITLES[lockedMode] : "Image Tools"}
+          />
         </div>
       </header>
 
       <div className="mx-auto grid min-h-0 w-full max-w-6xl flex-1 grid-cols-1 auto-rows-max gap-4 overflow-y-auto p-4 sm:px-6 sm:py-5 min-[900px]:auto-rows-fr min-[900px]:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] min-[900px]:overflow-hidden">
           <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-ui bg-surface shadow-sm">
-            <div className="grid shrink-0 grid-cols-4 border-b border-ui-subtle p-1.5">
+            {!lockedMode && <div className="grid shrink-0 grid-cols-4 border-b border-ui-subtle p-1.5">
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
@@ -1122,7 +1147,7 @@ export default function ImageTools({ onClose }: { onClose: () => void }) {
                   <span className="mt-0.5 block text-[11px] text-ink-muted">{tab.caption}</span>
                 </button>
               ))}
-            </div>
+            </div>}
 
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5 min-[900px]:overflow-hidden">
               {!source ? (

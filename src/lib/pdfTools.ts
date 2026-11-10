@@ -1,6 +1,15 @@
 import { decryptPDF, isEncrypted } from "@pdfsmaller/pdf-decrypt";
 import { encryptPDF } from "@pdfsmaller/pdf-encrypt";
-import { degrees, PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import {
+  degrees,
+  PDFArray,
+  PDFDict,
+  PDFDocument,
+  PDFName,
+  PDFStream,
+  rgb,
+  StandardFonts,
+} from "pdf-lib";
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -59,6 +68,26 @@ export function parsePageOrder(value: string, pageCount: number): number[] {
     );
   }
   return order;
+}
+
+export async function deletePdfPages(file: File, pagesToDelete: number[]): Promise<Uint8Array> {
+  const pdf = await PDFDocument.load(await file.arrayBuffer());
+  const pageCount = pdf.getPageCount();
+  if (
+    !pagesToDelete.length ||
+    new Set(pagesToDelete).size !== pagesToDelete.length ||
+    pagesToDelete.some((page) => !Number.isSafeInteger(page) || page < 1 || page > pageCount)
+  ) {
+    throw new RangeError(`Choose page numbers between 1 and ${pageCount}, without duplicates.`);
+  }
+  if (pagesToDelete.length >= pageCount) {
+    throw new RangeError("At least one page must remain in the PDF.");
+  }
+  pagesToDelete
+    .map((page) => page - 1)
+    .sort((left, right) => right - left)
+    .forEach((pageIndex) => pdf.removePage(pageIndex));
+  return pdf.save();
 }
 
 function pdfBlob(bytes: Uint8Array): Blob {
@@ -147,6 +176,350 @@ export async function addPageNumbers(file: File): Promise<Uint8Array> {
     });
   });
   return pdf.save();
+}
+
+const CYBER_CAFE_WATERMARK_KEY = PDFName.of("CyberCafeStudioWatermark");
+
+export type PdfWatermarkPosition =
+  | "center"
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right"
+  | "diagonal";
+
+export interface PdfWatermarkOptions {
+  type: "text" | "image";
+  text: string;
+  image?: File | null;
+  opacity: number;
+  position: PdfWatermarkPosition;
+  size: number;
+  rotation: number;
+  pages?: number[];
+  color: string;
+}
+
+export interface PdfWatermarkRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface FlattenedWatermarkRemovalOptions {
+  region?: PdfWatermarkRegion;
+  text?: string;
+  pages?: number[];
+  fillColor: string;
+}
+
+function parseWatermarkColor(color: string): ReturnType<typeof rgb> {
+  const match = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(color);
+  if (!match) throw new RangeError("Choose a valid watermark color.");
+  return rgb(
+    Number.parseInt(match[1], 16) / 255,
+    Number.parseInt(match[2], 16) / 255,
+    Number.parseInt(match[3], 16) / 255,
+  );
+}
+
+function getWatermarkPosition(
+  position: PdfWatermarkPosition,
+  width: number,
+  height: number,
+  watermarkWidth: number,
+  watermarkHeight: number,
+): { x: number; y: number; angle: number } {
+  const margin = Math.min(width, height) * 0.06;
+  switch (position) {
+    case "top-left": return { x: margin, y: height - watermarkHeight - margin, angle: 0 };
+    case "top-right": return { x: width - watermarkWidth - margin, y: height - watermarkHeight - margin, angle: 0 };
+    case "bottom-left": return { x: margin, y: margin, angle: 0 };
+    case "bottom-right": return { x: width - watermarkWidth - margin, y: margin, angle: 0 };
+    case "diagonal": return {
+      x: (width - watermarkWidth) / 2,
+      y: (height - watermarkHeight) / 2,
+      angle: -45,
+    };
+    case "center": return {
+      x: (width - watermarkWidth) / 2,
+      y: (height - watermarkHeight) / 2,
+      angle: 0,
+    };
+  }
+}
+
+export async function addPdfWatermark(
+  file: File,
+  options: PdfWatermarkOptions,
+): Promise<Uint8Array> {
+  const watermarkText = options.text.trim();
+  if (options.type === "text" && !watermarkText) {
+    throw new RangeError("Enter text for the watermark.");
+  }
+  if (watermarkText.length > 100) {
+    throw new RangeError("Watermark text must be 100 characters or fewer.");
+  }
+  if (!Number.isFinite(options.opacity) || options.opacity < 0.05 || options.opacity > 0.8) {
+    throw new RangeError("Watermark opacity must be between 5 and 80 percent.");
+  }
+  if (!Number.isFinite(options.size) || options.size < 10 || options.size > 80) {
+    throw new RangeError("Watermark size must be between 10 and 80 percent.");
+  }
+  if (!Number.isFinite(options.rotation) || options.rotation < -90 || options.rotation > 90) {
+    throw new RangeError("Watermark rotation must be between -90 and 90 degrees.");
+  }
+  if (
+    !["center", "top-left", "top-right", "bottom-left", "bottom-right", "diagonal"]
+      .includes(options.position)
+  ) {
+    throw new RangeError("Choose a valid watermark position.");
+  }
+  const color = parseWatermarkColor(options.color);
+  if (options.type === "image" && !options.image) {
+    throw new RangeError("Choose a PNG or JPEG image for the watermark.");
+  }
+  if (
+    options.image &&
+    !["image/png", "image/jpeg"].includes(options.image.type) &&
+    !/\.(png|jpe?g)$/i.test(options.image.name)
+  ) {
+    throw new RangeError("Watermark images must be PNG or JPEG files.");
+  }
+
+  const pdf = await PDFDocument.load(await file.arrayBuffer());
+  const pageCount = pdf.getPageCount();
+  const pages = options.pages ?? Array.from({ length: pageCount }, (_, index) => index + 1);
+  if (
+    !pages.length ||
+    new Set(pages).size !== pages.length ||
+    pages.some((page) => !Number.isSafeInteger(page) || page < 1 || page > pageCount)
+  ) {
+    throw new RangeError(`Choose watermark pages between 1 and ${pageCount}, without duplicates.`);
+  }
+
+  const watermarkImage = options.type === "image" && options.image
+    ? options.image.type === "image/png" || /\.png$/i.test(options.image.name)
+      ? await pdf.embedPng(await options.image.arrayBuffer())
+      : await pdf.embedJpg(await options.image.arrayBuffer())
+    : null;
+  const font = options.type === "text"
+    ? await pdf.embedFont(StandardFonts.HelveticaBold)
+    : null;
+  for (const pageNumber of pages) {
+    const page = pdf.getPage(pageNumber - 1);
+    const { width, height } = page.getSize();
+    const targetWidth = width * options.size / 100;
+    const targetHeight = height * options.size / 100;
+    if (watermarkImage) {
+      const scale = Math.min(
+        targetWidth / watermarkImage.width,
+        targetHeight / watermarkImage.height,
+      );
+      const imageWidth = watermarkImage.width * scale;
+      const imageHeight = watermarkImage.height * scale;
+      const position = getWatermarkPosition(
+        options.position,
+        width,
+        height,
+        imageWidth,
+        imageHeight,
+      );
+      page.drawImage(watermarkImage, {
+        x: position.x,
+        y: position.y,
+        width: imageWidth,
+        height: imageHeight,
+        opacity: options.opacity,
+        rotate: degrees(options.rotation + position.angle),
+      });
+    } else if (font) {
+      const size = Math.max(
+        8,
+        Math.min(96, targetWidth / font.widthOfTextAtSize(watermarkText, 1)),
+      );
+      const textWidth = font.widthOfTextAtSize(watermarkText, size);
+      const textHeight = size * 1.2;
+      const position = getWatermarkPosition(
+        options.position,
+        width,
+        height,
+        textWidth,
+        textHeight,
+      );
+      page.drawText(watermarkText, {
+        x: position.x,
+        y: position.y,
+        size,
+        font,
+        color,
+        opacity: options.opacity,
+        rotate: degrees(options.rotation + position.angle),
+      });
+    }
+
+    const contents = page.node.Contents();
+    if (!(contents instanceof PDFArray) || contents.size() === 0) {
+      throw new Error("Unable to mark the watermark for later removal.");
+    }
+    const stream = pdf.context.lookupMaybe(contents.get(contents.size() - 1), PDFStream);
+    if (!stream) throw new Error("Unable to mark the watermark for later removal.");
+    stream.dict.set(CYBER_CAFE_WATERMARK_KEY, PDFName.of("true"));
+  }
+  return pdf.save();
+}
+
+export async function removePdfWatermarks(file: File): Promise<Uint8Array> {
+  const pdf = await PDFDocument.load(await file.arrayBuffer());
+  let removed = 0;
+  for (const page of pdf.getPages()) {
+    const annotations = page.node.Annots();
+    if (annotations) {
+      for (let index = annotations.size() - 1; index >= 0; index--) {
+        const annotation = pdf.context.lookupMaybe(annotations.get(index), PDFDict);
+        const subtype = annotation?.lookupMaybe(PDFName.of("Subtype"), PDFName)?.decodeText();
+        const name = annotation?.lookupMaybe(PDFName.of("Name"), PDFName)?.decodeText();
+        if (subtype === "Watermark" || (subtype === "Stamp" && name === "Watermark")) {
+          annotations.remove(index);
+          removed++;
+        }
+      }
+      if (annotations.size() === 0) page.node.delete(PDFName.of("Annots"));
+    }
+
+    const contents = page.node.Contents();
+    if (contents instanceof PDFArray) {
+      for (let index = contents.size() - 1; index >= 0; index--) {
+        const stream = pdf.context.lookupMaybe(contents.get(index), PDFStream);
+        if (stream?.dict.has(CYBER_CAFE_WATERMARK_KEY)) {
+          contents.remove(index);
+          removed++;
+        }
+      }
+      if (contents.size() === 0) page.node.delete(PDFName.Contents);
+    }
+  }
+  if (!removed) {
+    throw new Error("No removable watermark annotation or Cyber Cafe Studio watermark was found.");
+  }
+  return pdf.save();
+}
+
+export async function removeFlattenedWatermarkRegion(
+  file: File,
+  options: FlattenedWatermarkRemovalOptions,
+): Promise<Uint8Array> {
+  if (!options.region && !options.text?.trim()) {
+    throw new RangeError("Enter watermark text or select the watermark area.");
+  }
+  if (options.text && options.text.length > 100) {
+    throw new RangeError("Watermark search text must be 100 characters or fewer.");
+  }
+  if (options.region) {
+    const { x, y, width, height } = options.region;
+    if (
+      ![x, y, width, height].every(Number.isFinite) ||
+      x < 0 || y < 0 || width <= 0 || height <= 0 ||
+      x + width > 1 || y + height > 1
+    ) {
+      throw new RangeError("Select a valid watermark area inside the page.");
+    }
+  }
+  const fillMatch = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(options.fillColor);
+  if (!fillMatch) throw new RangeError("Choose a valid fill color.");
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const rendered = await loadPdf(bytes);
+  const pages = options.pages ?? Array.from(
+    { length: rendered.numPages },
+    (_, index) => index + 1,
+  );
+  if (
+    !pages.length ||
+    new Set(pages).size !== pages.length ||
+    pages.some((page) => !Number.isSafeInteger(page) || page < 1 || page > rendered.numPages)
+  ) {
+    await rendered.destroy();
+    throw new RangeError(`Choose pages between 1 and ${rendered.numPages}, without duplicates.`);
+  }
+
+  const pagesToEdit = new Set(pages);
+  const output = await PDFDocument.create();
+  let totalPixels = 0;
+  let matchedTextItems = 0;
+  try {
+    for (let index = 0; index < rendered.numPages; index++) {
+      const pageNumber = index + 1;
+      const sourcePage = await rendered.getPage(pageNumber);
+      const viewport = sourcePage.getViewport({ scale: 2 });
+      if (viewport.width * viewport.height > 32_000_000) {
+        throw new RangeError("A page is too large to safely rasterize for watermark removal.");
+      }
+      totalPixels += viewport.width * viewport.height;
+      if (totalPixels > 250_000_000) {
+        throw new RangeError("This PDF is too large to safely rasterize in one pass.");
+      }
+      const canvas = document.createElement("canvas");
+      try {
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Canvas 2D context is unavailable.");
+        await sourcePage.render({ canvasContext: context, viewport }).promise;
+        if (pagesToEdit.has(pageNumber) && options.region) {
+          const { x, y, width, height } = options.region;
+          context.fillStyle = `#${fillMatch[1]}${fillMatch[2]}${fillMatch[3]}`;
+          context.fillRect(
+            x * canvas.width,
+            y * canvas.height,
+            width * canvas.width,
+            height * canvas.height,
+          );
+        }
+        if (pagesToEdit.has(pageNumber) && options.text?.trim()) {
+          const searchText = options.text.trim().toLocaleLowerCase();
+          const textContent = await sourcePage.getTextContent();
+          context.fillStyle = `#${fillMatch[1]}${fillMatch[2]}${fillMatch[3]}`;
+          for (const item of textContent.items) {
+            if (!("str" in item) || !("transform" in item)) continue;
+            if (!item.str.toLocaleLowerCase().includes(searchText)) continue;
+            const [, , , , textX, textY] = item.transform;
+            const bounds = viewport.convertToViewportRectangle([
+              textX,
+              textY,
+              textX + item.width,
+              textY + item.height,
+            ]);
+            const left = Math.max(0, Math.min(bounds[0], bounds[2]) - 2);
+            const top = Math.max(0, Math.min(bounds[1], bounds[3]) - 2);
+            const right = Math.min(canvas.width, Math.max(bounds[0], bounds[2]) + 2);
+            const bottom = Math.min(canvas.height, Math.max(bounds[1], bounds[3]) + 2);
+            context.fillRect(left, top, right - left, bottom - top);
+            matchedTextItems++;
+          }
+        }
+        const image = await output.embedPng(canvas.toDataURL("image/png"));
+        const outputPage = output.addPage([viewport.width / 2, viewport.height / 2]);
+        outputPage.drawImage(image, {
+          x: 0,
+          y: 0,
+          width: viewport.width / 2,
+          height: viewport.height / 2,
+        });
+      } finally {
+        canvas.width = 0;
+        canvas.height = 0;
+        sourcePage.cleanup();
+      }
+    }
+    if (options.text?.trim() && matchedTextItems === 0) {
+      throw new Error(`No selectable PDF text matched "${options.text.trim()}".`);
+    }
+    return output.save();
+  } finally {
+    await rendered.destroy();
+  }
 }
 
 export async function protectPdfFile(file: File, password: string): Promise<Uint8Array> {

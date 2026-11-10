@@ -1,22 +1,39 @@
 import { useMemo, useState } from "react";
 import {
   ArrowRight,
+  Crop,
+  FileArchive,
   FileText,
-  FileStack,
+  Files,
+  FileImage,
+  FileLock2,
+  Eraser,
+  Hash,
   Image,
   ImageMinus,
+  ListOrdered,
+  LockKeyholeOpen,
   Rocket,
   Search,
+  Scissors,
+  Stamp,
+  Trash2,
   SquareUserRound,
+  RotateCw,
+  RefreshCw,
+  Scaling,
 } from "lucide-react";
+import type { ImageToolMode } from "./ImageTools";
+import type { PdfOperation } from "./PdfTools";
 
 interface Props {
   onOpenDocumentEditor: () => void;
   onOpenDocumentMaker: () => void;
+  onOpenBiodataResumeMaker: () => void;
   onOpenPassportPhotoMaker: () => void;
   onOpenBackgroundRemover: () => void;
-  onOpenImageTools: () => void;
-  onOpenPdfTools: () => void;
+  onOpenImageTool: (mode: ImageToolMode) => void;
+  onOpenPdfTool: (operation: PdfOperation) => void;
 }
 
 const tools = [
@@ -35,6 +52,13 @@ const tools = [
     Icon: FileText,
   },
   {
+    id: "biodata-resume",
+    title: "Biodata & Resume Maker",
+    description: "Create personal biodata for any purpose or a job resume, then export a PDF.",
+    action: "Create a resume",
+    Icon: FileText,
+  },
+  {
     id: "passport",
     title: "Passport Photo Maker",
     description: "Create correctly sized passport and ID photo sheets.",
@@ -42,18 +66,130 @@ const tools = [
     Icon: SquareUserRound,
   },
   {
-    id: "image-tools",
-    title: "Image Tools",
-    description: "Resize photos and signatures, compress files, and convert image formats.",
-    action: "Open image tools",
+    id: "image-resize",
+    title: "Photo & Signature Resizer",
+    description: "Resize photos and signatures to the dimensions needed for online forms.",
+    action: "Resize an image",
+    Icon: Scaling,
+  },
+  {
+    id: "image-crop",
+    title: "Image Cropper",
+    description: "Crop, straighten, and frame photos or scanned documents.",
+    action: "Crop an image",
+    Icon: Crop,
+  },
+  {
+    id: "image-compress",
+    title: "Image Compressor",
+    description: "Reduce image file size for portals with upload limits.",
+    action: "Compress an image",
+    Icon: FileArchive,
+  },
+  {
+    id: "image-convert",
+    title: "Image Converter",
+    description: "Convert images between supported file formats.",
+    action: "Convert an image",
+    Icon: RefreshCw,
+  },
+  {
+    id: "pdf-merge",
+    title: "Merge PDF",
+    description: "Combine PDF files in your chosen order.",
+    action: "Merge PDFs",
+    Icon: Files,
+  },
+  {
+    id: "pdf-split",
+    title: "Split PDF",
+    description: "Save page ranges from a PDF as separate files.",
+    action: "Split a PDF",
+    Icon: Scissors,
+  },
+  {
+    id: "pdf-organize",
+    title: "Organize PDF Pages",
+    description: "Reorder pages in a PDF document.",
+    action: "Organize pages",
+    Icon: ListOrdered,
+  },
+  {
+    id: "pdf-delete-pages",
+    title: "Delete PDF Pages",
+    description: "Remove selected pages from a PDF while keeping the rest.",
+    action: "Delete pages",
+    Icon: Trash2,
+  },
+  {
+    id: "pdf-image-to-pdf",
+    title: "Image to PDF",
+    description: "Put scanned photos and images into a PDF.",
+    action: "Create a PDF",
     Icon: Image,
   },
   {
-    id: "pdf-tools",
-    title: "PDF Tools",
-    description: "Merge, split, compress, convert, and organize PDF files.",
-    action: "Open PDF tools",
-    Icon: FileStack,
+    id: "pdf-to-image",
+    title: "PDF to Image",
+    description: "Export PDF pages as high-resolution images.",
+    action: "Convert a PDF",
+    Icon: FileImage,
+  },
+  {
+    id: "pdf-compress",
+    title: "Compress PDF",
+    description: "Reduce PDF file size for online applications.",
+    action: "Compress a PDF",
+    Icon: FileArchive,
+  },
+  {
+    id: "pdf-rotate",
+    title: "Rotate PDF",
+    description: "Correct the page orientation in a PDF.",
+    action: "Rotate a PDF",
+    Icon: RotateCw,
+  },
+  {
+    id: "pdf-crop",
+    title: "Crop PDF",
+    description: "Trim extra borders from PDF pages.",
+    action: "Crop a PDF",
+    Icon: Crop,
+  },
+  {
+    id: "pdf-page-numbers",
+    title: "Add PDF Page Numbers",
+    description: "Add page and total-page numbers to a PDF.",
+    action: "Add page numbers",
+    Icon: Hash,
+  },
+  {
+    id: "pdf-add-watermark",
+    title: "Add PDF Watermark",
+    description: "Add custom text diagonally across every page of a PDF.",
+    action: "Add watermark",
+    Icon: Stamp,
+  },
+  {
+    id: "pdf-remove-watermark",
+    title: "Remove PDF Watermark",
+    description: "Remove watermark annotations, find text watermarks, or cover a flattened area.",
+    action: "Remove watermark",
+    Icon: Eraser,
+  },
+  {
+    id: "pdf-protect",
+    title: "Protect PDF",
+    description: "Set an opening password on a PDF.",
+    action: "Protect a PDF",
+    Icon: FileLock2,
+  },
+  {
+    id: "pdf-unlock",
+    title: "Unlock PDF",
+    description: "Remove a PDF password when you have authorization.",
+    action: "Unlock a PDF",
+    Icon: LockKeyholeOpen,
   },
   {
     id: "background",
@@ -67,10 +203,11 @@ const tools = [
 export default function ToolHome({
   onOpenDocumentEditor,
   onOpenDocumentMaker,
+  onOpenBiodataResumeMaker,
   onOpenPassportPhotoMaker,
   onOpenBackgroundRemover,
-  onOpenImageTools,
-  onOpenPdfTools,
+  onOpenImageTool,
+  onOpenPdfTool,
 }: Props) {
   const [query, setQuery] = useState("");
   const visibleTools = useMemo(() => {
@@ -84,10 +221,27 @@ export default function ToolHome({
   const openTool = (toolId: (typeof tools)[number]["id"]) => {
     if (toolId === "documents") onOpenDocumentEditor();
     if (toolId === "document-maker") onOpenDocumentMaker();
+    if (toolId === "biodata-resume") onOpenBiodataResumeMaker();
     if (toolId === "passport") onOpenPassportPhotoMaker();
     if (toolId === "background") onOpenBackgroundRemover();
-    if (toolId === "image-tools") onOpenImageTools();
-    if (toolId === "pdf-tools") onOpenPdfTools();
+    if (toolId === "image-resize") onOpenImageTool("resize");
+    if (toolId === "image-crop") onOpenImageTool("crop");
+    if (toolId === "image-compress") onOpenImageTool("compress");
+    if (toolId === "image-convert") onOpenImageTool("convert");
+    if (toolId === "pdf-merge") onOpenPdfTool("merge");
+    if (toolId === "pdf-split") onOpenPdfTool("split");
+    if (toolId === "pdf-organize") onOpenPdfTool("organize");
+    if (toolId === "pdf-delete-pages") onOpenPdfTool("delete-pages");
+    if (toolId === "pdf-image-to-pdf") onOpenPdfTool("image-to-pdf");
+    if (toolId === "pdf-to-image") onOpenPdfTool("pdf-to-image");
+    if (toolId === "pdf-compress") onOpenPdfTool("compress");
+    if (toolId === "pdf-rotate") onOpenPdfTool("rotate");
+    if (toolId === "pdf-crop") onOpenPdfTool("crop");
+    if (toolId === "pdf-page-numbers") onOpenPdfTool("page-numbers");
+    if (toolId === "pdf-add-watermark") onOpenPdfTool("add-watermark");
+    if (toolId === "pdf-remove-watermark") onOpenPdfTool("remove-watermark");
+    if (toolId === "pdf-protect") onOpenPdfTool("protect");
+    if (toolId === "pdf-unlock") onOpenPdfTool("unlock");
   };
 
   return (
@@ -129,7 +283,7 @@ export default function ToolHome({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search documents, photos, image tools, and PDFs..."
+            placeholder="Search tools, documents, photos, images, and PDFs..."
             className="w-full bg-transparent text-sm text-ink-primary outline-none placeholder:text-ink-muted sm:text-base"
           />
         </label>

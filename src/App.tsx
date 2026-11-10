@@ -10,18 +10,33 @@ import {
 import {
   CheckCircle2,
   ChevronDown,
+  Crop,
+  Eraser,
+  FileArchive,
+  FileImage,
+  Files,
   FileText,
-  FileStack,
+  FileLock2,
   Github,
+  Hash,
   Heart,
   Image,
   ImageMinus,
+  ListOrdered,
+  LockKeyholeOpen,
   Minus,
   Newspaper,
+  RefreshCw,
+  RotateCw,
+  Scaling,
+  Scissors,
   Square,
   SquareUserRound,
+  Stamp,
+  Trash2,
   Copy,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { DOC_CATEGORIES } from "./constants";
 import { paginate } from "./lib/pagination";
@@ -43,6 +58,8 @@ import AboutDialog from "./components/AboutDialog";
 import DonationDialog from "./components/DonationDialog";
 import UpdateDialog from "./components/UpdateDialog";
 import type { UpdateStatus } from "./types";
+import type { ImageToolMode } from "./components/ImageTools";
+import type { PdfOperation } from "./components/PdfTools";
 
 const PassportPhotoMaker = lazy(
   () => import("./components/PassportPhotoMaker"),
@@ -50,9 +67,39 @@ const PassportPhotoMaker = lazy(
 const PhotoBackgroundRemover = lazy(
   () => import("./components/PhotoBackgroundRemover"),
 );
-const ImageTools = lazy(() => import("./components/ImageTools"));
-const PdfTools = lazy(() => import("./components/PdfTools"));
+const IMAGE_TOOL_SCREENS = {
+  resize: lazy(() => import("./components/ImageResizer")),
+  crop: lazy(() => import("./components/ImageCropper")),
+  compress: lazy(() => import("./components/ImageCompressor")),
+  convert: lazy(() => import("./components/ImageConverter")),
+};
+const PDF_TOOL_SCREENS = {
+  merge: lazy(() => import("./components/PdfMerger")),
+  split: lazy(() => import("./components/PdfSplitter")),
+  organize: lazy(() => import("./components/PdfPageOrganizer")),
+  "delete-pages": lazy(() => import("./components/PdfPageDeleter")),
+  "image-to-pdf": lazy(() => import("./components/ImageToPdf")),
+  "pdf-to-image": lazy(() => import("./components/PdfToImage")),
+  compress: lazy(() => import("./components/PdfCompressor")),
+  rotate: lazy(() => import("./components/PdfRotator")),
+  crop: lazy(() => import("./components/PdfCropper")),
+  "page-numbers": lazy(() => import("./components/PdfPageNumbering")),
+  "add-watermark": lazy(() => import("./components/PdfWatermarkAdder")),
+  "remove-watermark": lazy(() => import("./components/PdfWatermarkRemover")),
+  protect: lazy(() => import("./components/PdfProtector")),
+  unlock: lazy(() => import("./components/PdfUnlocker")),
+};
 const DocumentMaker = lazy(() => import("./components/DocumentMaker"));
+const BiodataResumeMaker = lazy(
+  () => import("./components/BiodataResumeMaker"),
+);
+
+interface ToolMenuEntry {
+  label: string;
+  Icon: LucideIcon;
+  onSelect: () => void;
+  active: boolean;
+}
 
 function App() {
   const {
@@ -103,7 +150,10 @@ function App() {
   const [showPhotoBackgroundRemover, setShowPhotoBackgroundRemover] = useState(false);
   const [showImageTools, setShowImageTools] = useState(false);
   const [showPdfTools, setShowPdfTools] = useState(false);
+  const [initialImageToolMode, setInitialImageToolMode] = useState<ImageToolMode | undefined>();
+  const [initialPdfOperation, setInitialPdfOperation] = useState<PdfOperation | undefined>();
   const [showDocumentMaker, setShowDocumentMaker] = useState(false);
+  const [showBiodataResumeMaker, setShowBiodataResumeMaker] = useState(false);
   const [passportPhoto, setPassportPhoto] = useState<File | null>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
@@ -122,10 +172,13 @@ function App() {
   } | null>(null);
   const toastIdRef = useRef(0);
   const desktopAPI = window.desktopAPI;
+  const ActiveImageTool = IMAGE_TOOL_SCREENS[initialImageToolMode ?? "resize"];
+  const ActivePdfTool = PDF_TOOL_SCREENS[initialPdfOperation ?? "merge"];
 
   const openDocumentEditor = () => {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
+    setShowBiodataResumeMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
@@ -135,6 +188,7 @@ function App() {
   const openPassportPhotoMaker = () => {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
+    setShowBiodataResumeMaker(false);
     setShowPassportPhotoMaker(true);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
@@ -144,42 +198,132 @@ function App() {
   const openBackgroundRemover = () => {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
+    setShowBiodataResumeMaker(false);
     setShowPhotoBackgroundRemover(true);
     setShowPassportPhotoMaker(false);
     setShowImageTools(false);
     setShowPdfTools(false);
   };
 
-  const openImageTools = () => {
+  const openImageTools = (mode?: ImageToolMode) => {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
+    setShowBiodataResumeMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(true);
     setShowPdfTools(false);
+    setInitialImageToolMode(mode);
   };
 
-  const openPdfTools = () => {
+  const openPdfTools = (operation?: PdfOperation) => {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
+    setShowBiodataResumeMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
     setShowPdfTools(true);
+    setInitialPdfOperation(operation);
   };
 
   const openDocumentMaker = () => {
     setIsHomeScreen(false);
     setShowDocumentMaker(true);
+    setShowBiodataResumeMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
     setShowPdfTools(false);
   };
 
+  const openBiodataResumeMaker = () => {
+    setIsHomeScreen(false);
+    setShowDocumentMaker(false);
+    setShowBiodataResumeMaker(true);
+    setShowPassportPhotoMaker(false);
+    setShowPhotoBackgroundRemover(false);
+    setShowImageTools(false);
+    setShowPdfTools(false);
+  };
+
+  const toolMenuGroups: { title: string; tools: ToolMenuEntry[] }[] = [
+    {
+      title: "Workspace",
+      tools: [
+        {
+          label: "Doc Stitch",
+          Icon: FileText,
+          onSelect: openDocumentEditor,
+          active: !isHomeScreen && !showDocumentMaker && !showPassportPhotoMaker &&
+            !showBiodataResumeMaker && !showPhotoBackgroundRemover &&
+            !showImageTools && !showPdfTools,
+        },
+        {
+          label: "Document Maker",
+          Icon: FileText,
+          onSelect: openDocumentMaker,
+          active: showDocumentMaker,
+        },
+        {
+          label: "Biodata & Resume Maker",
+          Icon: FileText,
+          onSelect: openBiodataResumeMaker,
+          active: showBiodataResumeMaker,
+        },
+      ],
+    },
+    {
+      title: "Image tools",
+      tools: [
+        { label: "Photo & Signature Resizer", Icon: Scaling, onSelect: () => openImageTools("resize"), active: showImageTools && initialImageToolMode === "resize" },
+        { label: "Image Cropper", Icon: Crop, onSelect: () => openImageTools("crop"), active: showImageTools && initialImageToolMode === "crop" },
+        { label: "Image Compressor", Icon: FileArchive, onSelect: () => openImageTools("compress"), active: showImageTools && initialImageToolMode === "compress" },
+        { label: "Image Converter", Icon: RefreshCw, onSelect: () => openImageTools("convert"), active: showImageTools && initialImageToolMode === "convert" },
+      ],
+    },
+    {
+      title: "PDF tools",
+      tools: [
+        { label: "Merge PDF", Icon: Files, onSelect: () => openPdfTools("merge"), active: showPdfTools && initialPdfOperation === "merge" },
+        { label: "Split PDF", Icon: Scissors, onSelect: () => openPdfTools("split"), active: showPdfTools && initialPdfOperation === "split" },
+        { label: "Organize Pages", Icon: ListOrdered, onSelect: () => openPdfTools("organize"), active: showPdfTools && initialPdfOperation === "organize" },
+        { label: "Delete Pages", Icon: Trash2, onSelect: () => openPdfTools("delete-pages"), active: showPdfTools && initialPdfOperation === "delete-pages" },
+        { label: "Image to PDF", Icon: Image, onSelect: () => openPdfTools("image-to-pdf"), active: showPdfTools && initialPdfOperation === "image-to-pdf" },
+        { label: "PDF to Image", Icon: FileImage, onSelect: () => openPdfTools("pdf-to-image"), active: showPdfTools && initialPdfOperation === "pdf-to-image" },
+        { label: "Compress PDF", Icon: FileArchive, onSelect: () => openPdfTools("compress"), active: showPdfTools && initialPdfOperation === "compress" },
+        { label: "Rotate PDF", Icon: RotateCw, onSelect: () => openPdfTools("rotate"), active: showPdfTools && initialPdfOperation === "rotate" },
+        { label: "Crop PDF", Icon: Crop, onSelect: () => openPdfTools("crop"), active: showPdfTools && initialPdfOperation === "crop" },
+        { label: "Page Numbers", Icon: Hash, onSelect: () => openPdfTools("page-numbers"), active: showPdfTools && initialPdfOperation === "page-numbers" },
+        { label: "Add Watermark", Icon: Stamp, onSelect: () => openPdfTools("add-watermark"), active: showPdfTools && initialPdfOperation === "add-watermark" },
+        { label: "Remove Watermark", Icon: Eraser, onSelect: () => openPdfTools("remove-watermark"), active: showPdfTools && initialPdfOperation === "remove-watermark" },
+        { label: "Protect PDF", Icon: FileLock2, onSelect: () => openPdfTools("protect"), active: showPdfTools && initialPdfOperation === "protect" },
+        { label: "Unlock PDF", Icon: LockKeyholeOpen, onSelect: () => openPdfTools("unlock"), active: showPdfTools && initialPdfOperation === "unlock" },
+      ],
+    },
+    {
+      title: "Photo & identity",
+      tools: [
+        {
+          label: "Passport Photo Maker",
+          Icon: SquareUserRound,
+          onSelect: openPassportPhotoMaker,
+          active: showPassportPhotoMaker,
+        },
+        {
+          label: "Photo Background Remover",
+          Icon: ImageMinus,
+          onSelect: openBackgroundRemover,
+          active: showPhotoBackgroundRemover,
+        },
+      ],
+    },
+  ];
+
   const returnToHome = () => {
     setIsHomeScreen(true);
     setShowDocumentMaker(false);
+    setShowBiodataResumeMaker(false);
     setShowPassportPhotoMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
@@ -490,144 +634,40 @@ function App() {
                   id="tools-menu"
                   role="region"
                   aria-label="Tools"
-                  className="absolute right-0 top-full z-50 mt-2 w-[min(21rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-ui bg-surface p-2 text-left shadow-xl"
+                  className="scrollbar-hidden absolute right-0 top-full z-50 mt-2 max-h-[min(80dvh,42rem)] w-[min(26rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-ui bg-surface p-2 text-left shadow-xl"
                 >
-                  <div className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-                    Workspace
-                  </div>
-                  <button
-                    type="button"
-                    aria-current={
-                      !isHomeScreen &&
-                      !showDocumentMaker &&
-                      !showPassportPhotoMaker &&
-                      !showPhotoBackgroundRemover &&
-                      !showImageTools &&
-                      !showPdfTools
-                        ? "page"
-                        : undefined
-                    }
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
-                    onClick={() => {
-                      openDocumentEditor();
-                      setShowToolsMenu(false);
-                    }}
-                  >
-                    <FileText className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold text-ink-primary">
-                        Doc Stitch
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-ink-muted">
-                        Arrange and print documents
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-current={showDocumentMaker ? "page" : undefined}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
-                    onClick={() => {
-                      openDocumentMaker();
-                      setShowToolsMenu(false);
-                    }}
-                  >
-                    <FileText className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold text-ink-primary">
-                        Document Maker
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-ink-muted">
-                        Write in English, Bangla, and Hindi
-                      </span>
-                    </span>
-                  </button>
-                  <div className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-                    Image &amp; photo
-                  </div>
-                  <button
-                    type="button"
-                    aria-current={showImageTools ? "page" : undefined}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
-                    onClick={() => {
-                      openImageTools();
-                      setShowToolsMenu(false);
-                    }}
-                  >
-                    <Image className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold text-ink-strong">
-                        Image Tools
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-ink-muted">
-                        Resize, compress, and convert images
-                      </span>
-                    </span>
-                  </button>
-                  <div className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-                    PDF
-                  </div>
-                  <button
-                    type="button"
-                    aria-current={showPdfTools ? "page" : undefined}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
-                    onClick={() => {
-                      openPdfTools();
-                      setShowToolsMenu(false);
-                    }}
-                  >
-                    <FileStack className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold text-ink-primary">
-                        PDF Tools
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-ink-muted">
-                        Merge, convert, edit, and protect PDFs
-                      </span>
-                    </span>
-                  </button>
-                  <div className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-wider text-ink-faint">
-                    Photo &amp; identity
-                  </div>
-                  <button
-                    type="button"
-                    aria-current={showPassportPhotoMaker ? "page" : undefined}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
-                    onClick={() => {
-                      openPassportPhotoMaker();
-                      setShowToolsMenu(false);
-                    }}
-                  >
-                    <SquareUserRound className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold text-ink-primary">
-                        Passport Photo Maker
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-ink-muted">
-                        Arrange and print passport photos
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-current={showPhotoBackgroundRemover ? "page" : undefined}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-action-subtle"
-                    onClick={() => {
-                      openBackgroundRemover();
-                      setShowToolsMenu(false);
-                    }}
-                  >
-                    <ImageMinus className="h-4 w-4 shrink-0 text-action-emphasis" aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-xs font-semibold text-ink-strong">
-                        Photo Background Remover
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-ink-muted">
-                        Portrait cutouts · local AI
-                      </span>
-                    </span>
-                  </button>
-
+                  {toolMenuGroups.map((group) => (
+                    <section
+                      key={group.title}
+                      aria-label={group.title}
+                      className="border-b border-ui-subtle px-1 py-2 last:border-b-0"
+                    >
+                      <h2 className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-faint">
+                        {group.title}
+                      </h2>
+                      <div className="grid grid-cols-2 gap-1">
+                        {group.tools.map(({ label, Icon, onSelect, active }) => (
+                          <button
+                            key={label}
+                            type="button"
+                            aria-current={active ? "page" : undefined}
+                            onClick={() => {
+                              onSelect();
+                              setShowToolsMenu(false);
+                            }}
+                            className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-action ${
+                              active
+                                ? "bg-action-subtle text-action-hover"
+                                : "text-ink-secondary hover:bg-surface-muted"
+                            }`}
+                          >
+                            <Icon className="h-3.5 w-3.5 shrink-0 text-action-emphasis" aria-hidden="true" />
+                            <span className="truncate text-[11px] font-semibold">{label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
                 </div>
               )}
 
@@ -718,10 +758,11 @@ function App() {
           <ToolHome
             onOpenDocumentEditor={openDocumentEditor}
             onOpenDocumentMaker={openDocumentMaker}
+            onOpenBiodataResumeMaker={openBiodataResumeMaker}
             onOpenPassportPhotoMaker={openPassportPhotoMaker}
             onOpenBackgroundRemover={openBackgroundRemover}
-            onOpenImageTools={openImageTools}
-            onOpenPdfTools={openPdfTools}
+            onOpenImageTool={openImageTools}
+            onOpenPdfTool={openPdfTools}
           />
         ) : showDocumentMaker ? (
           <Suspense
@@ -732,6 +773,16 @@ function App() {
             }
           >
             <DocumentMaker onClose={returnToHome} />
+          </Suspense>
+        ) : showBiodataResumeMaker ? (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center bg-surface-muted text-sm font-medium text-ink-muted">
+                Loading Biodata & Resume Maker…
+              </div>
+            }
+          >
+            <BiodataResumeMaker onClose={returnToHome} />
           </Suspense>
         ) : showPassportPhotoMaker ? (
           <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -757,7 +808,7 @@ function App() {
               </div>
             }
           >
-            <ImageTools onClose={returnToHome} />
+            <ActiveImageTool onClose={returnToHome} />
           </Suspense>
         ) : showPdfTools ? (
           <Suspense
@@ -767,7 +818,7 @@ function App() {
               </div>
             }
           >
-            <PdfTools onClose={returnToHome} />
+            <ActivePdfTool onClose={returnToHome} />
           </Suspense>
         ) : showPhotoBackgroundRemover ? (
           <Suspense
