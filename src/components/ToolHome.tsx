@@ -4,6 +4,7 @@ import {
   Crop,
   FileArchive,
   FileText,
+  GraduationCap,
   Files,
   FileImage,
   FileLock2,
@@ -13,6 +14,7 @@ import {
   ImageMinus,
   ListOrdered,
   LockKeyholeOpen,
+  PenLine,
   Rocket,
   Search,
   Scissors,
@@ -30,7 +32,9 @@ interface Props {
   onOpenDocumentEditor: () => void;
   onOpenDocumentMaker: () => void;
   onOpenBiodataResumeMaker: () => void;
+  onOpenSchoolProjectCoverMaker: () => void;
   onOpenPassportPhotoMaker: () => void;
+  onOpenPhotoSignatureMaker: () => void;
   onOpenBackgroundRemover: () => void;
   onOpenImageTool: (mode: ImageToolMode) => void;
   onOpenPdfTool: (operation: PdfOperation) => void;
@@ -59,11 +63,25 @@ const tools = [
     Icon: FileText,
   },
   {
+    id: "school-project-cover",
+    title: "School Project Cover Maker",
+    description: "Design a personalized school project cover and export it as a print-ready PDF.",
+    action: "Make a cover",
+    Icon: GraduationCap,
+  },
+  {
     id: "passport",
     title: "Passport Photo Maker",
     description: "Create correctly sized passport and ID photo sheets.",
     action: "Make passport photos",
     Icon: SquareUserRound,
+  },
+  {
+    id: "photo-signature",
+    title: "Photo + Signature / Name & Date",
+    description: "Place a signature image or print a name and date below a photo.",
+    action: "Add details below photo",
+    Icon: PenLine,
   },
   {
     id: "image-resize",
@@ -204,7 +222,9 @@ export default function ToolHome({
   onOpenDocumentEditor,
   onOpenDocumentMaker,
   onOpenBiodataResumeMaker,
+  onOpenSchoolProjectCoverMaker,
   onOpenPassportPhotoMaker,
+  onOpenPhotoSignatureMaker,
   onOpenBackgroundRemover,
   onOpenImageTool,
   onOpenPdfTool,
@@ -222,7 +242,9 @@ export default function ToolHome({
     if (toolId === "documents") onOpenDocumentEditor();
     if (toolId === "document-maker") onOpenDocumentMaker();
     if (toolId === "biodata-resume") onOpenBiodataResumeMaker();
+    if (toolId === "school-project-cover") onOpenSchoolProjectCoverMaker();
     if (toolId === "passport") onOpenPassportPhotoMaker();
+    if (toolId === "photo-signature") onOpenPhotoSignatureMaker();
     if (toolId === "background") onOpenBackgroundRemover();
     if (toolId === "image-resize") onOpenImageTool("resize");
     if (toolId === "image-crop") onOpenImageTool("crop");

@@ -18,6 +18,7 @@ import {
   FileText,
   FileLock2,
   Github,
+  GraduationCap,
   Hash,
   Heart,
   Image,
@@ -26,6 +27,7 @@ import {
   LockKeyholeOpen,
   Minus,
   Newspaper,
+  PenLine,
   RefreshCw,
   RotateCw,
   Scaling,
@@ -64,6 +66,9 @@ import type { PdfOperation } from "./components/PdfTools";
 const PassportPhotoMaker = lazy(
   () => import("./components/PassportPhotoMaker"),
 );
+const PhotoSignatureMaker = lazy(
+  () => import("./components/PhotoSignatureMaker"),
+);
 const PhotoBackgroundRemover = lazy(
   () => import("./components/PhotoBackgroundRemover"),
 );
@@ -92,6 +97,9 @@ const PDF_TOOL_SCREENS = {
 const DocumentMaker = lazy(() => import("./components/DocumentMaker"));
 const BiodataResumeMaker = lazy(
   () => import("./components/BiodataResumeMaker"),
+);
+const SchoolProjectCoverMaker = lazy(
+  () => import("./components/SchoolProjectCoverMaker"),
 );
 
 interface ToolMenuEntry {
@@ -147,6 +155,7 @@ function App() {
   const [showDocumentPrintDialog, setShowDocumentPrintDialog] = useState(false);
   const [showDonationDialog, setShowDonationDialog] = useState(false);
   const [showPassportPhotoMaker, setShowPassportPhotoMaker] = useState(false);
+  const [showPhotoSignatureMaker, setShowPhotoSignatureMaker] = useState(false);
   const [showPhotoBackgroundRemover, setShowPhotoBackgroundRemover] = useState(false);
   const [showImageTools, setShowImageTools] = useState(false);
   const [showPdfTools, setShowPdfTools] = useState(false);
@@ -154,6 +163,7 @@ function App() {
   const [initialPdfOperation, setInitialPdfOperation] = useState<PdfOperation | undefined>();
   const [showDocumentMaker, setShowDocumentMaker] = useState(false);
   const [showBiodataResumeMaker, setShowBiodataResumeMaker] = useState(false);
+  const [showSchoolProjectCoverMaker, setShowSchoolProjectCoverMaker] = useState(false);
   const [passportPhoto, setPassportPhoto] = useState<File | null>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
@@ -179,7 +189,9 @@ function App() {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
     setShowBiodataResumeMaker(false);
+    setShowSchoolProjectCoverMaker(false);
     setShowPassportPhotoMaker(false);
+    setShowPhotoSignatureMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
     setShowPdfTools(false);
@@ -189,7 +201,21 @@ function App() {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
     setShowBiodataResumeMaker(false);
+    setShowSchoolProjectCoverMaker(false);
     setShowPassportPhotoMaker(true);
+    setShowPhotoSignatureMaker(false);
+    setShowPhotoBackgroundRemover(false);
+    setShowImageTools(false);
+    setShowPdfTools(false);
+  };
+
+  const openPhotoSignatureMaker = () => {
+    setIsHomeScreen(false);
+    setShowDocumentMaker(false);
+    setShowBiodataResumeMaker(false);
+    setShowSchoolProjectCoverMaker(false);
+    setShowPassportPhotoMaker(false);
+    setShowPhotoSignatureMaker(true);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
     setShowPdfTools(false);
@@ -199,8 +225,10 @@ function App() {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
     setShowBiodataResumeMaker(false);
+    setShowSchoolProjectCoverMaker(false);
     setShowPhotoBackgroundRemover(true);
     setShowPassportPhotoMaker(false);
+    setShowPhotoSignatureMaker(false);
     setShowImageTools(false);
     setShowPdfTools(false);
   };
@@ -209,7 +237,9 @@ function App() {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
     setShowBiodataResumeMaker(false);
+    setShowSchoolProjectCoverMaker(false);
     setShowPassportPhotoMaker(false);
+    setShowPhotoSignatureMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(true);
     setShowPdfTools(false);
@@ -220,7 +250,9 @@ function App() {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
     setShowBiodataResumeMaker(false);
+    setShowSchoolProjectCoverMaker(false);
     setShowPassportPhotoMaker(false);
+    setShowPhotoSignatureMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
     setShowPdfTools(true);
@@ -231,7 +263,9 @@ function App() {
     setIsHomeScreen(false);
     setShowDocumentMaker(true);
     setShowBiodataResumeMaker(false);
+    setShowSchoolProjectCoverMaker(false);
     setShowPassportPhotoMaker(false);
+    setShowPhotoSignatureMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
     setShowPdfTools(false);
@@ -241,7 +275,21 @@ function App() {
     setIsHomeScreen(false);
     setShowDocumentMaker(false);
     setShowBiodataResumeMaker(true);
+    setShowSchoolProjectCoverMaker(false);
     setShowPassportPhotoMaker(false);
+    setShowPhotoSignatureMaker(false);
+    setShowPhotoBackgroundRemover(false);
+    setShowImageTools(false);
+    setShowPdfTools(false);
+  };
+
+  const openSchoolProjectCoverMaker = () => {
+    setIsHomeScreen(false);
+    setShowDocumentMaker(false);
+    setShowBiodataResumeMaker(false);
+    setShowSchoolProjectCoverMaker(true);
+    setShowPassportPhotoMaker(false);
+    setShowPhotoSignatureMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
     setShowPdfTools(false);
@@ -256,7 +304,7 @@ function App() {
           Icon: FileText,
           onSelect: openDocumentEditor,
           active: !isHomeScreen && !showDocumentMaker && !showPassportPhotoMaker &&
-            !showBiodataResumeMaker && !showPhotoBackgroundRemover &&
+            !showBiodataResumeMaker && !showSchoolProjectCoverMaker && !showPhotoSignatureMaker && !showPhotoBackgroundRemover &&
             !showImageTools && !showPdfTools,
         },
         {
@@ -271,12 +319,19 @@ function App() {
           onSelect: openBiodataResumeMaker,
           active: showBiodataResumeMaker,
         },
+        {
+          label: "School Project Cover Maker",
+          Icon: GraduationCap,
+          onSelect: openSchoolProjectCoverMaker,
+          active: showSchoolProjectCoverMaker,
+        },
       ],
     },
     {
       title: "Image tools",
       tools: [
         { label: "Photo & Signature Resizer", Icon: Scaling, onSelect: () => openImageTools("resize"), active: showImageTools && initialImageToolMode === "resize" },
+        { label: "Photo + Signature / Name & Date", Icon: PenLine, onSelect: openPhotoSignatureMaker, active: showPhotoSignatureMaker },
         { label: "Image Cropper", Icon: Crop, onSelect: () => openImageTools("crop"), active: showImageTools && initialImageToolMode === "crop" },
         { label: "Image Compressor", Icon: FileArchive, onSelect: () => openImageTools("compress"), active: showImageTools && initialImageToolMode === "compress" },
         { label: "Image Converter", Icon: RefreshCw, onSelect: () => openImageTools("convert"), active: showImageTools && initialImageToolMode === "convert" },
@@ -324,7 +379,9 @@ function App() {
     setIsHomeScreen(true);
     setShowDocumentMaker(false);
     setShowBiodataResumeMaker(false);
+    setShowSchoolProjectCoverMaker(false);
     setShowPassportPhotoMaker(false);
+    setShowPhotoSignatureMaker(false);
     setShowPhotoBackgroundRemover(false);
     setShowImageTools(false);
     setShowPdfTools(false);
@@ -371,6 +428,7 @@ function App() {
     setPassportPhoto(file);
     setIsHomeScreen(false);
     setShowPassportPhotoMaker(true);
+    setShowPhotoSignatureMaker(false);
     setShowPhotoBackgroundRemover(false);
   }, []);
 
@@ -611,9 +669,11 @@ function App() {
                   (!isHomeScreen &&
                     !showDocumentMaker &&
                     !showPassportPhotoMaker &&
+                    !showPhotoSignatureMaker &&
                     !showPhotoBackgroundRemover &&
                     !showImageTools) ||
                   showPassportPhotoMaker ||
+                  showPhotoSignatureMaker ||
                   showPhotoBackgroundRemover ||
                   showImageTools ||
                   showPdfTools ||
@@ -759,7 +819,9 @@ function App() {
             onOpenDocumentEditor={openDocumentEditor}
             onOpenDocumentMaker={openDocumentMaker}
             onOpenBiodataResumeMaker={openBiodataResumeMaker}
+            onOpenSchoolProjectCoverMaker={openSchoolProjectCoverMaker}
             onOpenPassportPhotoMaker={openPassportPhotoMaker}
+            onOpenPhotoSignatureMaker={openPhotoSignatureMaker}
             onOpenBackgroundRemover={openBackgroundRemover}
             onOpenImageTool={openImageTools}
             onOpenPdfTool={openPdfTools}
@@ -784,6 +846,16 @@ function App() {
           >
             <BiodataResumeMaker onClose={returnToHome} />
           </Suspense>
+        ) : showSchoolProjectCoverMaker ? (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center bg-surface-muted text-sm font-medium text-ink-muted">
+                Loading School Project Cover Maker…
+              </div>
+            }
+          >
+            <SchoolProjectCoverMaker onClose={returnToHome} />
+          </Suspense>
         ) : showPassportPhotoMaker ? (
           <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
             <Suspense
@@ -800,6 +872,16 @@ function App() {
               />
             </Suspense>
           </main>
+        ) : showPhotoSignatureMaker ? (
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center bg-surface-muted text-sm font-medium text-ink-muted">
+                Loading Photo + Signature tool…
+              </div>
+            }
+          >
+            <PhotoSignatureMaker onClose={returnToHome} />
+          </Suspense>
         ) : showImageTools ? (
           <Suspense
             fallback={
