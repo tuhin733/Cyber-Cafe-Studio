@@ -34,39 +34,5 @@ export default defineConfig({
   build: {
     target: 'es2022',
     chunkSizeWarningLimit: 900,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined;
-
-          if (
-            id.includes('@huggingface') ||
-            id.includes('onnxruntime') ||
-            id.includes('transformers')
-          ) {
-            return 'background-removal';
-          }
-
-          if (
-            id.includes('jspdf') ||
-            id.includes('html2canvas') ||
-            id.includes('pdfjs') ||
-            id.includes('pdf-lib')
-          ) {
-            return 'pdf-tools';
-          }
-
-          if (id.includes('react') || id.includes('react-dom')) {
-            return 'react-vendor';
-          }
-
-          if (id.includes('lucide-react')) {
-            return 'icons';
-          }
-
-          return 'vendor';
-        },
-      },
-    },
   },
 });
