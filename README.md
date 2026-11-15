@@ -15,14 +15,37 @@
 
 ## What you can do
 
+### Documents and photos
+
 - **Doc Stitch:** Arrange and resize images on A4 pages, then export or print documents.
-- **Document Maker:** Create and recover documents with local autosave and a document library; use built-in templates or save reusable templates with their branding and layout; format text with paragraph styles, line spacing, and paragraph spacing; edit page size, orientation, margins, page breaks, headers, footers, and page numbers; find and replace; insert links, colored/highlighted text, freely position and proportionally resize images, and format tables with header rows, cell fills, and alignment; type or paste Unicode text in any script using your system input method, choose common, Indic-script, or installed fonts, or upload and save custom fonts; import/export DOCX and preview/export selectable-text PDFs.
-- **Biodata & Resume Maker:** Quickly enter a job seeker's contact details, objective, education, experience, and skills, or prepare personal biodata for any purpose with an editable title and flexible personal, education, work, family, and additional-detail sections; preview changes live and download a print-ready PDF.
+- **Document Maker:** Create documents with local autosave and a document library; use built-in templates or save reusable templates; format text, pages, headers, footers, and tables; insert and resize images; use Unicode text and common, Indic-script, installed, or uploaded fonts; import and export DOCX; and preview or export PDFs.
+- **Biodata & Resume Maker:** Create a job resume or personal biodata, preview it live, and download a print-ready PDF.
 - **Passport Photo Maker:** Create passport and ID photo sheets with configurable sizes and print layouts.
-- **Photo + Signature / Name & Date:** Add a signature image or print a name and date below a photo, then download the combined PNG.
-- **Image tools:** Resize, crop, compress, and convert photos and signatures. Each operation opens in its own focused workspace from the home screen.
-- **PDF tools:** Merge and split PDFs, organize or delete pages, convert images to PDF or PDF pages to images, compress, rotate, crop, add page numbers, and add text or PNG/JPEG watermarks with configurable position, size, rotation, opacity, color, and page selection. Remove PDF watermark annotations and Cyber Cafe Studio watermarks, search for selectable watermark text, or manually select a flattened watermark area. Text-match and manual cleanup rasterize every page and cannot restore content hidden beneath the mark. Each operation opens in its own focused workspace from the home screen.
-- **Background Remover:** Remove portrait backgrounds and choose a replacement.
+- **Background Remover:** Remove or replace the background in a portrait.
+
+### Image tools
+
+- **Photo & Signature Resizer:** Resize photos and signatures to dimensions needed for online forms.
+- **Image Cropper:** Crop, straighten, and frame photos or scanned documents.
+- **Image Compressor:** Reduce image file size.
+- **Image Converter:** Convert images between supported file formats.
+
+### PDF tools
+
+- **Merge PDF:** Combine PDF files in a chosen order.
+- **Split PDF:** Save page ranges from a PDF as separate files.
+- **Organize PDF Pages:** Reorder PDF pages.
+- **Delete PDF Pages:** Remove selected pages.
+- **Image to PDF:** Put selected images into a PDF.
+- **PDF to Image:** Export PDF pages as high-resolution PNG images.
+- **Compress PDF:** Reduce file size by rasterizing pages; text will no longer be selectable.
+- **Rotate PDF:** Rotate PDF pages.
+- **Crop PDF:** Set an equal crop margin on all four sides.
+- **Add PDF Page Numbers:** Add page and total-page numbers.
+- **Add PDF Watermark:** Stamp custom text across PDF pages.
+- **Remove PDF Watermark:** Remove watermark annotations, find matching selectable watermark text, or cover a selected flattened-watermark area. Text-match and selected-area cleanup rasterize every page and cannot restore content hidden beneath the mark.
+- **Protect PDF:** Encrypt a PDF with an opening password.
+- **Unlock PDF:** Remove a PDF password when authorized; AES-128 files are exported as flattened pages.
 
 ## Get started
 
