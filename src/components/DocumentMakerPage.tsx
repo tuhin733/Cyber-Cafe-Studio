@@ -1,0 +1,899 @@
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
+import type { Editor } from "@tiptap/core";
+import { EditorContent, useEditor } from "@tiptap/react";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { AlignCenter, AlignLeft, AlignRight, Columns2, Copy, Plus, RotateCcw, RotateCw, Trash2 } from "lucide-react";
+import { DOCUMENT_MAKER_EXTENSIONS } from "../lib/documentMakerExtensions";
+import {
+  getIndicTransliterationSuggestions,
+  type IndicLanguage,
+} from "../lib/indicTransliteration";
+import {
+  getDocumentMakerBlockStartPosition,
+  getDocumentMakerContentInsets,
+  splitDocumentMakerContentAtPageBreak,
+  splitDocumentMakerTableAtRow,
+  type DocumentMakerLayout,
+  type DocumentMakerPage,
+  getDocumentMakerPageDimensions,
+} from "../lib/documentMaker";
+
+interface Props {
+  page: DocumentMakerPage;
+  pageNumber: number;
+  active: boolean;
+  autoFocusAtEnd: boolean;
+  layout: DocumentMakerLayout;
+  onContentChange: (pageId: string, page: DocumentMakerPage["content"]) => void;
+  onAutoPage: (pageId: string, content: DocumentMakerPage["content"], activateNextPage?: boolean) => void;
+  onActivate: (pageId: string) => void;
+  onSelectionUpdate: (pageId: string) => void;
+  onEditorReady: (pageId: string, editor: Editor | null) => void;
+  onAutoPageFocused: (pageId: string) => void;
+  transliterationLanguage: IndicLanguage;
+}
+
+interface TransliterationSuggestion {
+  from: number;
+  to: number;
+  word: string;
+  suggestions: string[];
+  selectedIndex: number;
+  left: number;
+  top: number;
+}
+
+interface TableContextMenu {
+  left: number;
+  top: number;
+}
+
+interface ImageContextMenu {
+  left: number;
+  top: number;
+  position: number;
+}
+
+interface RowResizeState {
+  row: HTMLTableRowElement;
+  position: number;
+  startY: number;
+  startHeight: number;
+  pointerId: number;
+}
+
+interface TableDragState {
+  position: number;
+  node: ProseMirrorNode;
+  pointerId: number;
+}
+
+export default function DocumentMakerPageEditor({
+  page,
+  pageNumber,
+  active,
+  autoFocusAtEnd,
+  layout,
+  onContentChange,
+  onAutoPage,
+  onActivate,
+  onSelectionUpdate,
+  onEditorReady,
+  onAutoPageFocused,
+  transliterationLanguage,
+}: Props) {
+  const [tableContextMenu, setTableContextMenu] = useState<TableContextMenu | null>(null);
+  const [imageContextMenu, setImageContextMenu] = useState<ImageContextMenu | null>(null);
+  const [isDraggingTable, setIsDraggingTable] = useState(false);
+  const [transliterationSuggestion, setTransliterationSuggestion] =
+    useState<TransliterationSuggestion | null>(null);
+  const transliterationSuggestionRef = useRef<TransliterationSuggestion | null>(null);
+  const tableContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const imageContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<Editor | null>(null);
+  const rowResizeRef = useRef<RowResizeState | null>(null);
+  const tableDragRef = useRef<TableDragState | null>(null);
+  const isAutoPaging = useRef(false);
+
+  const setCurrentTransliterationSuggestion = useCallback(
+    (suggestion: TransliterationSuggestion | null) => {
+      transliterationSuggestionRef.current = suggestion;
+      setTransliterationSuggestion(suggestion);
+    },
+    [],
+  );
+
+  const updateTransliterationSuggestion = useCallback(
+    (currentEditor: Editor) => {
+      const selection = currentEditor.state.selection;
+      if (!active || transliterationLanguage === "en" || !selection.empty) {
+        setCurrentTransliterationSuggestion(null);
+        return;
+      }
+
+      const $cursor = selection.$from;
+      const textBeforeCursor = $cursor.parent.textBetween(
+        0,
+        $cursor.parentOffset,
+        "",
+        "\ufffc",
+      );
+      const wordMatch = /[a-z]+$/i.exec(textBeforeCursor);
+      if (!wordMatch) {
+        setCurrentTransliterationSuggestion(null);
+        return;
+      }
+
+      const word = wordMatch[0];
+      const suggestions = getIndicTransliterationSuggestions(word, transliterationLanguage);
+      if (!suggestions.length) {
+        setCurrentTransliterationSuggestion(null);
+        return;
+      }
+
+      const from = selection.from - word.length;
+      const cursor = currentEditor.view.coordsAtPos(selection.from);
+      const popupWidth = 240;
+      const popupHeight = Math.min(220, suggestions.length * 38 + 12);
+      const below = cursor.bottom + 4;
+      const top =
+        below + popupHeight <= window.innerHeight - 8
+          ? below
+          : Math.max(8, cursor.top - popupHeight - 4);
+      const left = Math.max(8, Math.min(cursor.left, window.innerWidth - popupWidth - 8));
+      setCurrentTransliterationSuggestion({
+        from,
+        to: selection.from,
+        word,
+        suggestions,
+        selectedIndex: 0,
+        left,
+        top,
+      });
+    },
+    [active, setCurrentTransliterationSuggestion, transliterationLanguage],
+  );
+
+  const acceptTransliterationSuggestion = useCallback(
+    (currentEditor: Editor, appendSpace = false, candidateIndex?: number) => {
+      const current = transliterationSuggestionRef.current;
+      if (!current) return false;
+      const replacement = current.suggestions[candidateIndex ?? current.selectedIndex];
+      if (!replacement) return false;
+
+      const insertedText = `${replacement}${appendSpace ? " " : ""}`;
+      const nextPosition = current.from + insertedText.length;
+      currentEditor
+        .chain()
+        .focus()
+        .insertContentAt({ from: current.from, to: current.to }, insertedText)
+        .setTextSelection(nextPosition)
+        .run();
+      setCurrentTransliterationSuggestion(null);
+      return true;
+    },
+    [setCurrentTransliterationSuggestion],
+  );
+
+  const splitOverflowToNextPage = useCallback(
+    (editor: Editor) => {
+      if (isAutoPaging.current) return;
+
+      const dom = editor.view.dom;
+      if (dom.scrollHeight <= dom.clientHeight + 1) return;
+
+      dom.scrollTop = 0;
+      const availableBottom =
+        dom.getBoundingClientRect().bottom -
+        Number.parseFloat(window.getComputedStyle(dom).paddingBottom || "0");
+      const overflowingBlock = Array.from(dom.children).findIndex(
+        (child) => child.getBoundingClientRect().bottom > availableBottom,
+      );
+      if (overflowingBlock < 0) return;
+
+      const overflowingNode = editor.state.doc.child(overflowingBlock);
+      if (overflowingNode.type.name === "table") {
+        const rows = Array.from(dom.children[overflowingBlock].querySelectorAll("tr"));
+        const overflowingRow = rows.findIndex(
+          (row) => row.getBoundingClientRect().bottom > availableBottom,
+        );
+        if (overflowingRow > 0) {
+          const split = splitDocumentMakerTableAtRow(
+            editor.state.doc,
+            overflowingBlock,
+            overflowingRow,
+          );
+          if (split) {
+            isAutoPaging.current = true;
+            try {
+              editor.commands.setContent(split.currentPage);
+              onAutoPage(page.id, split.nextPage, active);
+            } finally {
+              isAutoPaging.current = false;
+            }
+            return;
+          }
+        }
+      }
+
+      let splitPosition =
+        getDocumentMakerBlockStartPosition(editor.state.doc, overflowingBlock) ?? -1;
+
+      if (overflowingBlock === 0) {
+        const editorRect = dom.getBoundingClientRect();
+        const point = editor.view.posAtCoords({
+          left: editorRect.left + Math.min(120, editorRect.width / 2),
+          top: Math.max(editorRect.top + 1, availableBottom - 8),
+        });
+        if (!point) return;
+
+        const $point = editor.state.doc.resolve(point.pos);
+        const textBefore = $point.parent.textBetween(0, $point.parentOffset);
+        const lastSpace = textBefore.lastIndexOf(" ");
+        const splitOffset =
+          lastSpace > 0 ? lastSpace + 1 : $point.parentOffset;
+        if (splitOffset <= 0 || splitOffset >= $point.parent.content.size) return;
+        splitPosition = $point.start() + splitOffset;
+      }
+
+      const endPosition = editor.state.doc.content.size;
+      if (splitPosition <= 0 || splitPosition >= endPosition) return;
+
+      const overflow = editor.state.doc.slice(splitPosition, endPosition);
+      const content = overflow.content.toJSON();
+      if (!content?.length) return;
+
+      isAutoPaging.current = true;
+      try {
+        editor.chain().deleteRange({ from: splitPosition, to: endPosition }).run();
+        onAutoPage(page.id, { type: "doc", content }, active);
+      } finally {
+        isAutoPaging.current = false;
+      }
+    },
+    [active, onAutoPage, page.id],
+  );
+
+  const splitAtPageBreak = useCallback(
+    (editor: Editor) => {
+      if (isAutoPaging.current) return false;
+      const split = splitDocumentMakerContentAtPageBreak(editor.state.doc);
+      if (!split) return false;
+
+      isAutoPaging.current = true;
+      try {
+        editor.commands.setContent(
+          split.currentPage.content?.length
+            ? split.currentPage
+            : { type: "doc", content: [{ type: "paragraph" }] },
+        );
+        onAutoPage(page.id, split.nextPage, active);
+      } finally {
+        isAutoPaging.current = false;
+      }
+      return true;
+    },
+    [active, onAutoPage, page.id],
+  );
+
+  const editor = useEditor({
+    extensions: DOCUMENT_MAKER_EXTENSIONS,
+    content: page.content,
+    editorProps: {
+      attributes: {
+        class:
+          "document-maker-editor min-h-full px-6 py-6 text-base leading-7 text-ink-primary outline-none sm:px-10 sm:py-8",
+        "aria-label": `Document text, page ${pageNumber}`,
+      },
+      handleDOMEvents: {
+        focus: () => {
+          onActivate(page.id);
+          return false;
+        },
+      },
+      handleKeyDown: (_view, event): boolean => {
+        const current = transliterationSuggestionRef.current;
+        if (!current || event.ctrlKey || event.metaKey || event.altKey) return false;
+        const currentEditor = editorRef.current;
+        if (!currentEditor) return false;
+
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          const direction = event.key === "ArrowDown" ? 1 : -1;
+          const selectedIndex =
+            (current.selectedIndex + direction + current.suggestions.length) %
+            current.suggestions.length;
+          setCurrentTransliterationSuggestion({ ...current, selectedIndex });
+          return true;
+        }
+        if (event.key === "Enter" || event.key === "Tab") {
+          event.preventDefault();
+          return acceptTransliterationSuggestion(currentEditor);
+        }
+        if (event.key === " ") {
+          event.preventDefault();
+          return acceptTransliterationSuggestion(currentEditor, true, 0);
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setCurrentTransliterationSuggestion(null);
+          return true;
+        }
+        return false;
+      },
+    },
+    onUpdate: ({ editor: currentEditor }) => {
+      onContentChange(page.id, currentEditor.getJSON());
+      if (splitAtPageBreak(currentEditor)) {
+        updateTransliterationSuggestion(currentEditor);
+        return;
+      }
+      splitOverflowToNextPage(currentEditor);
+      updateTransliterationSuggestion(currentEditor);
+    },
+    onSelectionUpdate: ({ editor: currentEditor }) => {
+      onSelectionUpdate(page.id);
+      updateTransliterationSuggestion(currentEditor);
+    },
+    immediatelyRender: false,
+  });
+  editorRef.current = editor;
+
+  useEffect(() => {
+    setCurrentTransliterationSuggestion(null);
+  }, [setCurrentTransliterationSuggestion, transliterationLanguage]);
+
+  useEffect(() => {
+    if (!transliterationSuggestionRef.current || !editor) return;
+
+    const repositionSuggestion = () => {
+      const current = transliterationSuggestionRef.current;
+      if (!current) return;
+      const cursor = editor.view.coordsAtPos(current.to);
+      const popupHeight = Math.min(220, current.suggestions.length * 38 + 12);
+      const below = cursor.bottom + 4;
+      const top =
+        below + popupHeight <= window.innerHeight - 8
+          ? below
+          : Math.max(8, cursor.top - popupHeight - 4);
+      const left = Math.max(8, Math.min(cursor.left, window.innerWidth - 248));
+      setCurrentTransliterationSuggestion({ ...current, left, top });
+    };
+
+    window.addEventListener("scroll", repositionSuggestion, true);
+    window.addEventListener("resize", repositionSuggestion);
+    return () => {
+      window.removeEventListener("scroll", repositionSuggestion, true);
+      window.removeEventListener("resize", repositionSuggestion);
+    };
+  }, [editor, setCurrentTransliterationSuggestion, transliterationSuggestion?.from, transliterationSuggestion?.to]);
+
+  useEffect(() => {
+    if (!tableContextMenu && !imageContextMenu) return;
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (
+        tableContextMenuRef.current?.contains(target) ||
+        imageContextMenuRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setTableContextMenu(null);
+      setImageContextMenu(null);
+    };
+
+    document.addEventListener("pointerdown", handleOutsidePointerDown);
+    return () => document.removeEventListener("pointerdown", handleOutsidePointerDown);
+  }, [imageContextMenu, tableContextMenu]);
+
+  const handleTableContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const image = target.closest("img.document-maker-image");
+    if (image && editor) {
+      event.preventDefault();
+      const imageNodes: number[] = [];
+      editor.state.doc.descendants((node, position) => {
+        const imageNode = editor.view.nodeDOM(position);
+        if (
+          node.type.name === "image" &&
+          imageNode instanceof HTMLElement &&
+          (imageNode === image || imageNode.contains(image))
+        ) {
+          imageNodes.push(position);
+          return false;
+        }
+        return true;
+      });
+      const imagePosition = imageNodes[0];
+      if (imagePosition === undefined) return;
+      editor.commands.setNodeSelection(imagePosition);
+      editor.view.focus();
+      setTableContextMenu(null);
+      setImageContextMenu({
+        left: Math.max(8, Math.min(event.clientX, window.innerWidth - 220)),
+        top: Math.max(8, Math.min(event.clientY, window.innerHeight - 360)),
+        position: imagePosition,
+      });
+      return;
+    }
+    setImageContextMenu(null);
+    const cell = target.closest("td, th");
+    if (!cell || !editor) {
+      setTableContextMenu(null);
+      return;
+    }
+
+    event.preventDefault();
+    const domPosition = editor.view.posAtDOM(cell, 0);
+    const $position = editor.state.doc.resolve(domPosition);
+    let cellDepth = $position.depth;
+    while (
+      cellDepth > 0 &&
+      !["tableCell", "tableHeader"].includes($position.node(cellDepth).type.name)
+    ) {
+      cellDepth -= 1;
+    }
+    if (cellDepth === 0) return;
+
+    editor.commands.setCellSelection({ anchorCell: $position.before(cellDepth) });
+    editor.view.focus();
+    setTableContextMenu({
+      left: Math.max(8, Math.min(event.clientX, window.innerWidth - 260)),
+      top: Math.max(8, Math.min(event.clientY, window.innerHeight - 440)),
+    });
+  };
+
+  const handleRowResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!editor || event.button !== 0) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const row = target.closest("tr");
+    if (!(row instanceof HTMLTableRowElement)) return;
+
+    const rect = row.getBoundingClientRect();
+    if (event.clientY < rect.bottom - 6) return;
+    const domPosition = editor.view.posAtDOM(row, 0);
+    const $position = editor.state.doc.resolve(domPosition);
+    let rowDepth = $position.depth;
+    while (rowDepth > 0 && $position.node(rowDepth).type.name !== "tableRow") {
+      rowDepth -= 1;
+    }
+    if (rowDepth === 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    rowResizeRef.current = {
+      row,
+      position: $position.before(rowDepth),
+      startY: event.clientY,
+      startHeight: rect.height,
+      pointerId: event.pointerId,
+    };
+  };
+
+  const handleTableDragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!editor || event.button !== 0) return;
+    const target = event.target;
+    if (!(target instanceof Element) || !target.closest("[data-table-drag-handle]")) return;
+    const wrapper = target.closest(".tableWrapper");
+    if (!wrapper) return;
+
+    let draggedTable: TableDragState | null = null;
+    editor.state.doc.forEach((node, position) => {
+      if (node.type.name === "table" && editor.view.nodeDOM(position) === wrapper) {
+        draggedTable = { position, node, pointerId: event.pointerId };
+      }
+    });
+    if (!draggedTable) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    tableDragRef.current = draggedTable;
+    setIsDraggingTable(true);
+  };
+
+  const finishTableDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = tableDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || !editor) return;
+    tableDragRef.current = null;
+    setIsDraggingTable(false);
+
+    const blocks: Array<{ position: number; element: HTMLElement }> = [];
+    editor.state.doc.forEach((_node, position) => {
+      const element = editor.view.nodeDOM(position);
+      if (element instanceof HTMLElement) blocks.push({ position, element });
+    });
+    const destination =
+      blocks.find(({ element }) => {
+        const rect = element.getBoundingClientRect();
+        return rect.height > 0 && event.clientY < rect.top + rect.height / 2;
+      })?.position ?? editor.state.doc.content.size;
+    if (destination === drag.position || destination === drag.position + drag.node.nodeSize) {
+      return;
+    }
+
+    const transaction = editor.state.tr.delete(
+      drag.position,
+      drag.position + drag.node.nodeSize,
+    );
+    transaction.insert(transaction.mapping.map(destination), drag.node);
+    editor.view.dispatch(transaction);
+  };
+
+  const handleRowResizeMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = rowResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    const height = Math.max(24, resize.startHeight + event.clientY - resize.startY);
+    resize.row.style.height = `${height}px`;
+  };
+
+  const finishRowResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = rowResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId || !editor) return;
+    const height = Math.max(24, resize.startHeight + event.clientY - resize.startY);
+    rowResizeRef.current = null;
+    const rowNode = editor.state.doc.nodeAt(resize.position);
+    if (!rowNode || rowNode.type.name !== "tableRow") return;
+    editor.view.dispatch(
+      editor.state.tr.setNodeMarkup(resize.position, undefined, {
+        ...rowNode.attrs,
+        rowHeight: Math.round(height),
+      }),
+    );
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const runTableContextAction = (
+    action: "row-above" | "row-below" | "column-left" | "column-right" | "toggle-header-row" | "delete-row" | "delete-column" | "delete-table",
+  ) => {
+    if (!editor) return;
+    const chain = editor.chain().focus();
+    switch (action) {
+      case "row-above":
+        chain.addRowBefore().run();
+        break;
+      case "row-below":
+        chain.addRowAfter().run();
+        break;
+      case "column-left":
+        chain.addColumnBefore().run();
+        break;
+      case "column-right":
+        chain.addColumnAfter().run();
+        break;
+      case "toggle-header-row":
+        chain.toggleHeaderRow().run();
+        break;
+      case "delete-row":
+        chain.deleteRow().run();
+        break;
+      case "delete-column":
+        chain.deleteColumn().run();
+        break;
+      case "delete-table":
+        chain.deleteTable().run();
+        break;
+    }
+    setTableContextMenu(null);
+  };
+
+  const setTableCellAttribute = (
+    attribute: "backgroundColor" | "textAlign",
+    value: string | null,
+  ) => {
+    if (!editor) return;
+    editor.chain().focus().setCellAttribute(attribute, value).run();
+    setTableContextMenu(null);
+  };
+
+  const runImageContextAction = (
+    action: "left" | "center" | "right" | "rotate-left" | "rotate-right" | "duplicate" | "delete",
+  ) => {
+    if (!editor || !imageContextMenu) return;
+    const { position } = imageContextMenu;
+    const image = editor.state.doc.nodeAt(position);
+    if (!image || image.type.name !== "image") {
+      setImageContextMenu(null);
+      return;
+    }
+    if (action === "delete") {
+      editor.view.dispatch(editor.state.tr.delete(position, position + image.nodeSize));
+    } else if (action === "duplicate") {
+      editor.view.dispatch(editor.state.tr.insert(position + image.nodeSize, image.copy()));
+    } else {
+      const isAlignment = action === "left" || action === "center" || action === "right";
+      const align = isAlignment ? action : image.attrs.align;
+      const rotation = action === "rotate-left"
+        ? (Number(image.attrs.rotation || 0) + 270) % 360
+        : action === "rotate-right"
+          ? (Number(image.attrs.rotation || 0) + 90) % 360
+          : image.attrs.rotation;
+      const pageDimensions = getDocumentMakerPageDimensions(layout);
+      const imageWidth = Number(image.attrs.width) || 240;
+      const marginLeft = layout.margins.left * 96 / 25.4;
+      const marginRight = layout.margins.right * 96 / 25.4;
+      const alignedWidth = Math.min(
+        imageWidth,
+        Math.max(0, pageDimensions.widthPx - marginLeft - marginRight),
+      );
+      const x = isAlignment
+        ? action === "left"
+          ? marginLeft
+          : action === "center"
+            ? (pageDimensions.widthPx - alignedWidth) / 2
+            : pageDimensions.widthPx - marginRight - alignedWidth
+        : Number(image.attrs.x) || marginLeft;
+      const y = typeof image.attrs.y === "number"
+        ? image.attrs.y
+        : layout.margins.top * 96 / 25.4;
+      editor.view.dispatch(editor.state.tr.setNodeMarkup(position, undefined, {
+        ...image.attrs,
+        align,
+        rotation,
+        x,
+        y,
+      }));
+    }
+    setImageContextMenu(null);
+  };
+
+  useEffect(() => {
+    onEditorReady(page.id, editor);
+    return () => onEditorReady(page.id, null);
+  }, [editor, onEditorReady, page.id]);
+
+  useEffect(() => {
+    if (!active || !editor || !autoFocusAtEnd) return;
+    editor.commands.focus("end");
+    onAutoPageFocused(page.id);
+  }, [active, autoFocusAtEnd, editor, onAutoPageFocused, page.id]);
+
+  useEffect(() => {
+    if (!editor) return;
+    if (!splitAtPageBreak(editor)) splitOverflowToNextPage(editor);
+  }, [editor, layout, splitAtPageBreak, splitOverflowToNextPage]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (editor) splitOverflowToNextPage(editor);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [editor, splitOverflowToNextPage]);
+
+  const dimensions = getDocumentMakerPageDimensions(layout);
+  const contentInsets = getDocumentMakerContentInsets(layout);
+  const margins = {
+    "--page-margin-top": `${layout.margins.top * 96 / 25.4 + contentInsets.topPx}px`,
+    "--page-margin-right": `${layout.margins.right * 96 / 25.4}px`,
+    "--page-margin-bottom": `${layout.margins.bottom * 96 / 25.4 + contentInsets.bottomPx}px`,
+    "--page-margin-left": `${layout.margins.left * 96 / 25.4}px`,
+  } as React.CSSProperties;
+
+  return (
+    <div
+      id={`document-maker-page-${page.id}`}
+      role="region"
+      aria-label={`Page ${pageNumber}`}
+      onContextMenu={handleTableContextMenu}
+      onPointerDown={(event) => {
+        handleTableDragStart(event);
+        if (!tableDragRef.current) handleRowResizeStart(event);
+      }}
+      onPointerMove={(event) => {
+        handleRowResizeMove(event);
+      }}
+      onPointerUp={finishRowResize}
+      onPointerCancel={finishRowResize}
+      onPointerUpCapture={(event) => {
+        finishTableDrag(event);
+      }}
+      onPointerCancelCapture={(event) => {
+        finishTableDrag(event);
+      }}
+      style={{ ...margins, width: `${dimensions.widthPx}px`, maxWidth: "100%", aspectRatio: `${dimensions.widthPx} / ${dimensions.heightPx}` }}
+      className={`document-maker-page mx-auto w-full max-w-[800px] bg-surface shadow-sm ${
+        active ? "document-maker-page-active ring-1 ring-action-accent" : "ring-1 ring-ui"
+      } ${isDraggingTable ? "document-maker-table-dragging" : ""}`}
+    >
+      {layout.header && (
+        <div className="document-maker-page-header">{layout.header}</div>
+      )}
+      <EditorContent editor={editor} />
+      {editor &&
+        transliterationSuggestion &&
+        active &&
+        createPortal(
+          <div
+            role="listbox"
+            aria-label={`${transliterationSuggestion.word} transliteration suggestions`}
+            className="document-maker-transliteration fixed z-50 w-60 overflow-hidden rounded-xl border border-ui bg-surface p-1.5 shadow-xl"
+            style={{
+              left: transliterationSuggestion.left,
+              top: transliterationSuggestion.top,
+            }}
+          >
+            {transliterationSuggestion.suggestions.map((suggestion, index) => (
+              <button
+                key={`${suggestion}-${index}`}
+                type="button"
+                role="option"
+                aria-selected={transliterationSuggestion.selectedIndex === index}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() =>
+                  acceptTransliterationSuggestion(editor, false, index)
+                }
+                className={`flex min-h-9 w-full items-center rounded-lg px-2.5 py-1.5 text-left text-base text-ink-primary ${
+                  transliterationSuggestion.selectedIndex === index
+                    ? "bg-action-subtle text-action"
+                    : "hover:bg-surface-subtle"
+                }`}
+              >
+                <span className="mr-2 w-4 shrink-0 text-xs text-ink-muted">
+                  {index + 1}
+                </span>
+                {suggestion}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+      {(layout.footer || layout.pageNumbers) && (
+        <div className="document-maker-page-footer">
+          <span>{layout.footer}</span>
+          {layout.pageNumbers && (
+            <span className="document-maker-page-number">{pageNumber}</span>
+          )}
+          {layout.pageNumbers && <span aria-hidden="true" />}
+        </div>
+      )}
+      {tableContextMenu && active && (
+        <div
+          ref={tableContextMenuRef}
+          role="menu"
+          aria-label="Table options"
+          onMouseDown={(event) => event.preventDefault()}
+          className="fixed z-50 min-w-52 rounded-xl border border-ui bg-surface p-1.5 shadow-xl"
+          style={{ left: tableContextMenu.left, top: tableContextMenu.top }}
+        >
+          {([
+            ["row-above", "Insert Row Above"],
+            ["row-below", "Insert Row Below"],
+            ["column-left", "Insert Column Left"],
+            ["column-right", "Insert Column Right"],
+            ["toggle-header-row", "Toggle Header Row"],
+          ] as const).map(([action, label]) => (
+            <button
+              key={action}
+              type="button"
+              role="menuitem"
+              onClick={() => runTableContextAction(action)}
+              className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-ink-primary hover:bg-surface-muted"
+            >
+              <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+          <div className="my-1 border-t border-ui" />
+          <div className="px-2.5 py-1.5">
+            <p className="mb-1.5 text-xs font-semibold text-ink-secondary">Cell fill</p>
+            <div className="flex items-center gap-2">
+              {[
+                { label: "No fill", value: null, swatch: "transparent" },
+                { label: "Gray", value: "#F1F5F9", swatch: "#F1F5F9" },
+                { label: "Blue", value: "#DBEAFE", swatch: "#DBEAFE" },
+                { label: "Green", value: "#DCFCE7", swatch: "#DCFCE7" },
+                { label: "Yellow", value: "#FEF3C7", swatch: "#FEF3C7" },
+              ].map(({ label, value, swatch }) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-label={`${label} cell fill`}
+                  title={`${label} cell fill`}
+                  onClick={() => setTableCellAttribute("backgroundColor", value)}
+                  className="h-6 w-6 rounded-full border border-ui-strong"
+                  style={{ backgroundColor: swatch }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-1 px-2.5 py-1">
+            <span className="mr-1 text-xs font-semibold text-ink-secondary">Align</span>
+            {([
+              ["left", <AlignLeft className="h-4 w-4" aria-hidden="true" />],
+              ["center", <AlignCenter className="h-4 w-4" aria-hidden="true" />],
+              ["right", <AlignRight className="h-4 w-4" aria-hidden="true" />],
+            ] as const).map(([alignment, icon]) => (
+              <button
+                key={alignment}
+                type="button"
+                aria-label={`Align cell ${alignment}`}
+                title={`Align cell ${alignment}`}
+                onClick={() => setTableCellAttribute("textAlign", alignment)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-secondary hover:bg-surface-muted"
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+          <div className="my-1 border-t border-ui" />
+          {([
+            ["delete-row", "Delete Row"],
+            ["delete-column", "Delete Column"],
+            ["delete-table", "Delete Table"],
+          ] as const).map(([action, label]) => (
+            <button
+              key={action}
+              type="button"
+              role="menuitem"
+              onClick={() => runTableContextAction(action)}
+              className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-danger hover:bg-surface-muted"
+            >
+              {action === "delete-table" ? (
+                <Columns2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : (
+                <Trash2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+              )}
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {imageContextMenu && active && (
+        <div
+          ref={imageContextMenuRef}
+          role="menu"
+          aria-label="Image options"
+          onMouseDown={(event) => event.preventDefault()}
+          className="fixed z-50 min-w-48 rounded-xl border border-ui bg-surface p-1.5 shadow-xl"
+          style={{ left: imageContextMenu.left, top: imageContextMenu.top }}
+        >
+          {([
+            ["left", "Image left", <AlignLeft className="h-4 w-4" aria-hidden="true" />],
+            ["center", "Image center", <AlignCenter className="h-4 w-4" aria-hidden="true" />],
+            ["right", "Image right", <AlignRight className="h-4 w-4" aria-hidden="true" />],
+          ] as const).map(([action, label, icon]) => (
+            <button
+              key={action}
+              type="button"
+              role="menuitem"
+              onClick={() => runImageContextAction(action)}
+              className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-ink-primary hover:bg-surface-muted"
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+          <div className="my-1 border-t border-ui" />
+          {([
+            ["rotate-left", "Rotate left", <RotateCcw className="h-4 w-4" aria-hidden="true" />],
+            ["rotate-right", "Rotate right", <RotateCw className="h-4 w-4" aria-hidden="true" />],
+            ["duplicate", "Duplicate image", <Copy className="h-4 w-4" aria-hidden="true" />],
+            ["delete", "Delete image", <Trash2 className="h-4 w-4" aria-hidden="true" />],
+          ] as const).map(([action, label, icon]) => (
+            <button
+              key={action}
+              type="button"
+              role="menuitem"
+              onClick={() => runImageContextAction(action)}
+              className={`flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-surface-muted ${
+                action === "delete" ? "text-danger" : "text-ink-primary"
+              }`}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
