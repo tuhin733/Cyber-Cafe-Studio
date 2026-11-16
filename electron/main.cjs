@@ -461,7 +461,7 @@ ipcMain.handle("scanner:scan-document", async (event) => {
   if (!isTrustedSender(event)) throw new Error("Untrusted scanner request");
 
   const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "cyber-cafe-studio-scan-"));
-  const outputPath = path.join(tempDirectory, "scan.jpg");
+  const outputPath = path.join(tempDirectory, "scan.png");
   const scriptPath = app.isPackaged
     ? path.join(process.resourcesPath, "scanner", "scan-document.ps1")
     : path.join(__dirname, "scan-document.ps1");
@@ -512,7 +512,7 @@ ipcMain.handle("scanner:scan-document", async (event) => {
     return {
       canceled: false,
       bytes: new Uint8Array(image),
-      fileName: `scan-${new Date().toISOString().replace(/[:.]/g, "-")}.jpg`,
+      fileName: `scan-${new Date().toISOString().replace(/[:.]/g, "-")}.png`,
     };
   } finally {
     await fs.rm(tempDirectory, { recursive: true, force: true });

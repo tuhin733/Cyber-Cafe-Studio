@@ -36,7 +36,22 @@ export default function DocTray({
   onEdit,
 }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
+  const cancelRenameRef = useRef(false);
   const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false });
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
+  const [labelDraft, setLabelDraft] = useState("");
+
+  const startRenaming = (id: string, label: string) => {
+    cancelRenameRef.current = false;
+    setLabelDraft(label);
+    setEditingDocId(id);
+  };
+
+  const finishRenaming = (id: string) => {
+    const label = labelDraft.trim();
+    if (label) onLabelChange(id, label);
+    setEditingDocId(null);
+  };
 
   useEffect(() => {
     const list = listRef.current;
@@ -122,12 +137,49 @@ export default function DocTray({
 
               {/* Label */}
               <div className="min-w-0 flex-1">
-                <InputField
-                  type="text"
-                  value={doc.label}
-                  onChange={(e) => onLabelChange(doc.id, e.target.value)}
-                  className="w-full truncate rounded border border-transparent px-1.5 py-0.5 text-sm font-medium text-ink-strong hover:border-ui focus:border-action-outline focus:outline-none"
-                />
+                {editingDocId === doc.id ? (
+                  <InputField
+                    type="text"
+                    autoFocus
+                    value={labelDraft}
+                    onChange={(event) => setLabelDraft(event.target.value)}
+                    onBlur={() => {
+                      if (cancelRenameRef.current) {
+                        cancelRenameRef.current = false;
+                        return;
+                      }
+                      finishRenaming(doc.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      } else if (event.key === "Escape") {
+                        event.preventDefault();
+                        cancelRenameRef.current = true;
+                        setEditingDocId(null);
+                      }
+                    }}
+                    onFocus={(event) => event.currentTarget.select()}
+                    aria-label={`Rename ${doc.label}`}
+                    className="w-full truncate !border-0 !bg-surface-subtle !px-1.5 !py-0.5 text-sm font-medium text-ink-strong !shadow-none !ring-0 focus:!border-0 focus:!ring-0"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onDoubleClick={() => startRenaming(doc.id, doc.label)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        startRenaming(doc.id, doc.label);
+                      }
+                    }}
+                    aria-label={`Double-click or press Enter to rename ${doc.label}`}
+                    className="w-full truncate rounded px-1.5 py-0.5 text-left text-sm font-medium text-ink-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-action-accent"
+                  >
+                    {doc.label}
+                  </button>
+                )}
                 <p className="px-1.5 text-[10px] text-ink-faint">
                   {cat.label} · {doc.pxW}×{doc.pxH}px
                 </p>

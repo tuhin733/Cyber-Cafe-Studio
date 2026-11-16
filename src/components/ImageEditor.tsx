@@ -26,6 +26,11 @@ import {
   type Pt,
   type Quad,
 } from "../lib/perspectiveCrop";
+import {
+  applyAutoEnhance,
+  applyGrayscaleEnhancement,
+  applyPhotocopyEnhancement,
+} from "../lib/imageEnhancement";
 import { notifyUserError } from "../lib/userErrors";
 import { getThemeColor } from "../theme/theme";
 import InputField from "./InputField";
@@ -88,184 +93,6 @@ interface Props {
   onClose: () => void;
 }
 
-interface ToneSettings {
-  brightness?: number;
-  contrast?: number;
-  saturation?: number;
-  warmth?: number;
-}
-
-function applyTone(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  { brightness = 0, contrast = 1, saturation = 1, warmth = 0 }: ToneSettings,
-) {
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const pixels = imageData.data;
-  for (let i = 0; i < pixels.length; i += 4) {
-    const red = pixels[i];
-    const green = pixels[i + 1];
-    const blue = pixels[i + 2];
-    const gray = 0.299 * red + 0.587 * green + 0.114 * blue;
-    pixels[i] = (gray + (red - gray) * saturation - 128) * contrast + 128 + brightness + warmth;
-    pixels[i + 1] = (gray + (green - gray) * saturation - 128) * contrast + 128 + brightness;
-    pixels[i + 2] = (gray + (blue - gray) * saturation - 128) * contrast + 128 + brightness - warmth;
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
-function applyGrayscale(ctx: CanvasRenderingContext2D, w: number, h: number, contrast = 1, brightness = 0) {
-  applyTone(ctx, w, h, { saturation: 0, contrast, brightness });
-}
-
-function applyDenoise(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const source = imageData.data;
-  const output = new Uint8ClampedArray(source);
-  const offsets = [-w * 4 - 4, -w * 4, -w * 4 + 4, -4, 4, w * 4 - 4, w * 4, w * 4 + 4];
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const index = (y * w + x) * 4;
-      let minLuminance = 255;
-      let maxLuminance = 0;
-      let red = 0;
-      let green = 0;
-      let blue = 0;
-      for (const offset of offsets) {
-        const neighbor = index + offset;
-        const luminance = 0.299 * source[neighbor] +
-          0.587 * source[neighbor + 1] +
-          0.114 * source[neighbor + 2];
-        minLuminance = Math.min(minLuminance, luminance);
-        maxLuminance = Math.max(maxLuminance, luminance);
-        red += source[neighbor] / offsets.length;
-        green += source[neighbor + 1] / offsets.length;
-        blue += source[neighbor + 2] / offsets.length;
-      }
-      const centerLuminance = 0.299 * source[index] +
-        0.587 * source[index + 1] +
-        0.114 * source[index + 2];
-      const averageLuminance = 0.299 * red + 0.587 * green + 0.114 * blue;
-      if (maxLuminance - minLuminance < 40 && Math.abs(centerLuminance - averageLuminance) > 18) {
-        output[index] = source[index] * 0.55 + red * 0.45;
-        output[index + 1] = source[index + 1] * 0.55 + green * 0.45;
-        output[index + 2] = source[index + 2] * 0.55 + blue * 0.45;
-      }
-    }
-  }
-  ctx.putImageData(new ImageData(output, w, h), 0, 0);
-}
-
-function applyShadowRemoval(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  whitenBackground = false,
-) {
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const pixels = imageData.data;
-  const lift = whitenBackground ? 0.32 : 0.18;
-  for (let i = 0; i < pixels.length; i += 4) {
-    for (let channel = 0; channel < 3; channel++) {
-      const value = pixels[i + channel];
-      const normalized = value / 255;
-      pixels[i + channel] = value + (255 - value) * lift * normalized * normalized;
-    }
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
-function applyAutoContrast(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const pixels = imageData.data;
-  const histogram = new Uint32Array(256);
-  for (let i = 0; i < pixels.length; i += 4) {
-    const gray = Math.round(0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2]);
-    histogram[gray]++;
-  }
-
-  const total = pixels.length / 4;
-  const clipCount = Math.floor(total * 0.005);
-  let low = 0;
-  let high = 255;
-  let cumulative = 0;
-  for (; low < 255; low++) {
-    cumulative += histogram[low];
-    if (cumulative > clipCount) break;
-  }
-  cumulative = 0;
-  for (; high > 0; high--) {
-    cumulative += histogram[high];
-    if (cumulative > clipCount) break;
-  }
-  if (high <= low) return;
-  const range = high - low;
-  for (let i = 0; i < pixels.length; i += 4) {
-    const luminance = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
-    const adjusted = Math.max(0, Math.min(255, (luminance - low) * 255 / range));
-    const change = adjusted - luminance;
-    pixels[i] += change;
-    pixels[i + 1] += change;
-    pixels[i + 2] += change;
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
-function applyPaperWhitening(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const pixels = imageData.data;
-  for (let i = 0; i < pixels.length; i += 4) {
-    const gray = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2];
-    const amount = Math.max(0, Math.min(1, (gray - 170) / 75));
-    const smoothAmount = amount * amount * (3 - 2 * amount);
-    const whitened = gray + (255 - gray) * 0.9 * smoothAmount;
-    pixels[i] = whitened;
-    pixels[i + 1] = whitened;
-    pixels[i + 2] = whitened;
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
-function applyPhotocopyEnhancement(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  applyShadowRemoval(ctx, w, h);
-  applyGrayscale(ctx, w, h);
-  applyAutoContrast(ctx, w, h);
-  applySharpen(ctx, w, h, 0.24);
-  applyPaperWhitening(ctx, w, h);
-}
-
-function applySharpen(ctx: CanvasRenderingContext2D, w: number, h: number, strength = 0.3) {
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const source = imageData.data;
-  const output = new Uint8ClampedArray(source);
-  const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const index = (y * w + x) * 4;
-      for (let channel = 0; channel < 3; channel++) {
-        let sum = 0;
-        let min = 255;
-        let max = 0;
-        let kernelIndex = 0;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const neighbor = ((y + dy) * w + x + dx) * 4 + channel;
-            const value = source[neighbor];
-            min = Math.min(min, value);
-            max = Math.max(max, value);
-            sum += value * kernel[kernelIndex++];
-          }
-        }
-        const sharpened = source[index + channel] +
-          (sum - source[index + channel]) * strength;
-        output[index + channel] = Math.max(min, Math.min(max, sharpened));
-      }
-    }
-  }
-  ctx.putImageData(new ImageData(output, w, h), 0, 0);
-}
-
 const FILTERS: {
   id: FilterId;
   label: string;
@@ -283,26 +110,16 @@ const FILTERS: {
   {
     id: "auto-enhance",
     label: "Auto Enhance",
-    desc: "Denoise, remove shadows, balance contrast, and gently sharpen",
+    desc: "Denoise, lift shadows, balance contrast, and gently sharpen",
     icon: <Sun className="h-4 w-4" />,
-    apply: (ctx, w, h) => {
-      applyDenoise(ctx, w, h);
-      applyShadowRemoval(ctx, w, h);
-      applyAutoContrast(ctx, w, h);
-      applySharpen(ctx, w, h, 0.25);
-    },
+    apply: applyAutoEnhance,
   },
   {
     id: "grayscale-scan",
     label: "Grayscale",
-    desc: "Grayscale with shadow removal, contrast, and sharpening",
+    desc: "Even out page lighting, then improve contrast and text sharpness",
     icon: <Contrast className="h-4 w-4" />,
-    apply: (ctx, w, h) => {
-      applyShadowRemoval(ctx, w, h);
-      applyGrayscale(ctx, w, h);
-      applyAutoContrast(ctx, w, h);
-      applySharpen(ctx, w, h, 0.3);
-    },
+    apply: applyGrayscaleEnhancement,
   },
   {
     id: "bw-photocopy",

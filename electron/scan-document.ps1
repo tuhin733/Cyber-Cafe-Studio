@@ -4,14 +4,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$wiaIntentMaximizeQuality = 0x20000
+$wiaPngFormat = "{B96B3CAF-0728-11D3-9D7B-0000F81EF32E}"
 
 try {
   $dialog = New-Object -ComObject WIA.CommonDialog
   $image = $dialog.ShowAcquireImage(
     1,
+    $wiaIntentMaximizeQuality,
     0,
-    0,
-    "{B96B3CAE-0728-11D3-9D7B-0000F81EF32E}",
+    $wiaPngFormat,
     $true,
     $true,
     $false

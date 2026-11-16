@@ -4,6 +4,7 @@ import { DEFAULT_LAYOUT, DOC_CATEGORIES } from "../constants";
 import { paginate } from "../lib/pagination";
 import { savePDF } from "../lib/pdf";
 import { clearProject, loadProject, serializeProject } from "../lib/projectStorage";
+import { autoEnhanceImageFile } from "../lib/imageEnhancement";
 import type { AutoSaveStatus } from "../lib/autoSaveStatus";
 import { notifyUserError } from "../lib/userErrors";
 import { notifyUserSuccess } from "../lib/userNotifications";
@@ -100,35 +101,31 @@ export function useProjectState() {
 
   const addFiles = useCallback(
     async (files: File[], targetPageIndex?: number) => {
-      const results = await Promise.allSettled(
-        files.map(
-          (file) =>
-            new Promise<UploadedDoc>((resolve, reject) => {
-              const url = URL.createObjectURL(file);
-              const img = new Image();
-              img.onload = () => {
-                resolve({
-                  id: genId(),
-                  fileName: file.name,
-                  file,
-                  url,
-                  pxW: img.naturalWidth,
-                  pxH: img.naturalHeight,
-                  category: defaultCategory,
-                  label: DOC_CATEGORIES[defaultCategory].label,
-                  fitToPage: true,
-                  widthMm: 190,
-                  heightMm: 277,
-                });
-              };
-              img.onerror = () => {
-                URL.revokeObjectURL(url);
-                reject(new Error(`Could not decode ${file.name}`));
-              };
-              img.src = url;
-            }),
-        ),
-      );
+      const results: PromiseSettledResult<UploadedDoc>[] = [];
+      for (const file of files) {
+        try {
+          const enhancedImage = await autoEnhanceImageFile(file);
+          const url = URL.createObjectURL(enhancedImage.file);
+          results.push({
+            status: "fulfilled",
+            value: {
+              id: genId(),
+              fileName: enhancedImage.file.name,
+              file: enhancedImage.file,
+              url,
+              pxW: enhancedImage.width,
+              pxH: enhancedImage.height,
+              category: defaultCategory,
+              label: DOC_CATEGORIES[defaultCategory].label,
+              fitToPage: true,
+              widthMm: 190,
+              heightMm: 277,
+            },
+          });
+        } catch (reason) {
+          results.push({ status: "rejected", reason });
+        }
+      }
 
       const loadedDocs = results.flatMap((result) =>
         result.status === "fulfilled" ? [result.value] : [],
@@ -224,7 +221,7 @@ export function useProjectState() {
 
       if (failedFiles.length) {
         notifyUserError(
-          `Could not open ${failedFiles.length === 1 ? "image" : "images"}: ${failedFiles.join(", ")}.`,
+          `Could not open or auto-enhance ${failedFiles.length === 1 ? "image" : "images"}: ${failedFiles.join(", ")}.`,
         );
       }
 

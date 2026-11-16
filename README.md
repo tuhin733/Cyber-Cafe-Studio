@@ -18,6 +18,7 @@
 ### Documents and photos
 
 - **Doc Stitch:** Arrange and resize images on A4 pages, then export or print documents.
+- **Document Scanning & Auto Enhance:** Capture scans from WIA-compatible scanners with quality-prioritized settings and lossless PNG output. Uploaded and scanned document images are automatically denoised, shadow-lifted, contrast-balanced, and sharpened.
 - **Document Maker:** Create documents with local autosave and a document library; use built-in templates or save reusable templates; format text, pages, headers, footers, and tables; insert and resize images; use Unicode text and common, Indic-script, installed, or uploaded fonts; import and export DOCX; and preview or export PDFs.
 - **Biodata & Resume Maker:** Create a job resume or personal biodata, preview it live, and download a print-ready PDF.
 - **Passport Photo Maker:** Create passport and ID photo sheets with configurable sizes and print layouts.

@@ -493,7 +493,7 @@ function AppContent() {
       const result = await desktopAPI.scanDocument();
       if (!result.canceled) {
         const scannedFile = new File([result.bytes], result.fileName, {
-          type: "image/jpeg",
+          type: "image/png",
         });
         const addedDocId = await addFiles([scannedFile], activePageIndex);
         if (addedDocId) setEditingDocId(addedDocId);
