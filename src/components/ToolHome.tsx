@@ -58,8 +58,8 @@ const tools = [
   {
     id: "biodata-resume",
     title: "Biodata & Resume Maker",
-    description: "Create personal biodata for any purpose or a job resume, then export a PDF.",
-    action: "Create a resume",
+    description: "Build purpose-specific Indian resumes and biodata, with PDF, Word, and editable text export.",
+    action: "Create a resume or biodata",
     Icon: FileText,
   },
   {

@@ -9,8 +9,6 @@ import {
 } from "react";
 import {
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   ContactRound,
   Crop,
   Eraser,
@@ -21,6 +19,7 @@ import {
   Files,
   FileLock2,
   Github,
+  House,
   Hash,
   Heart,
   Image,
@@ -29,8 +28,11 @@ import {
   LockKeyholeOpen,
   Minus,
   Newspaper,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   RotateCw,
+  Search,
   Scaling,
   Scissors,
   Square,
@@ -114,11 +116,46 @@ function ToolSidebar({
   groups,
   collapsed,
   onToggle,
+  onHome,
 }: {
   groups: { title: string; tools: ToolNavigationEntry[] }[];
   collapsed: boolean;
   onToggle: () => void;
+  onHome: () => void;
 }) {
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isSearchOpen && !collapsed) searchInputRef.current?.focus();
+  }, [isSearchOpen, collapsed]);
+
+  const toggleSearch = () => {
+    if (isSearchOpen) {
+      setIsSearchOpen(false);
+      setSearchQuery("");
+      return;
+    }
+
+    if (collapsed) onToggle();
+    setIsSearchOpen(true);
+  };
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const visibleGroups = groups
+    .map((group) => {
+      const matchesGroup = group.title.toLowerCase().includes(normalizedQuery);
+      return {
+        ...group,
+        tools: group.tools.filter(({ label }) =>
+          !normalizedQuery ||
+          matchesGroup ||
+          label.toLowerCase().includes(normalizedQuery),
+        ),
+      };
+    })
+    .filter((group) => group.tools.length > 0);
+
   return (
     <aside
       aria-label="Tool navigation"
@@ -142,15 +179,67 @@ function ToolSidebar({
           className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-subtle hover:text-ink-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action"
         >
           {collapsed ? (
-            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
           ) : (
-            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
           )}
         </button>
       </div>
 
       <nav className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto p-2" aria-label="Tools">
-        {groups.map((group) => (
+        <div className="space-y-0.5 border-b border-ui-subtle pb-2">
+          <button
+            type="button"
+            aria-label="Home"
+            data-tooltip={collapsed ? "Home" : undefined}
+            data-tooltip-side="right"
+            onClick={onHome}
+            className={`flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-action ${
+              collapsed ? "justify-center px-0" : ""
+            }`}
+          >
+            <House className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+            {!collapsed && <span className="truncate">Home</span>}
+          </button>
+          {isSearchOpen ? (
+            <div className="flex min-h-9 items-center gap-2 rounded-xl bg-surface-subtle px-2.5">
+              <Search className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+              <input
+                ref={searchInputRef}
+                aria-label="Search sidebar tools"
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search tools..."
+                className="min-w-0 flex-1 bg-transparent py-2 text-xs text-ink-primary outline-none placeholder:text-ink-muted"
+              />
+              <button
+                type="button"
+                aria-label="Close tool search"
+                onClick={toggleSearch}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface hover:text-ink-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-action"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              aria-label="Search tools"
+              aria-expanded={false}
+              data-tooltip={collapsed ? "Search tools" : undefined}
+              data-tooltip-side="right"
+              onClick={toggleSearch}
+              className={`flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-action ${
+                collapsed ? "justify-center px-0" : ""
+              }`}
+            >
+              <Search className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+              {!collapsed && <span className="truncate">Search tools</span>}
+            </button>
+          )}
+        </div>
+        {visibleGroups.map((group) => (
           <section
             key={group.title}
             aria-label={group.title}
@@ -193,6 +282,9 @@ function ToolSidebar({
             </div>
           </section>
         ))}
+        {normalizedQuery && visibleGroups.length === 0 && (
+          <p className="px-2 py-4 text-xs text-ink-muted">No tools found.</p>
+        )}
       </nav>
     </aside>
   );
@@ -788,6 +880,7 @@ function AppContent() {
               groups={toolNavigationGroups}
               collapsed={isToolSidebarCollapsed}
               onToggle={() => setIsToolSidebarCollapsed((collapsed) => !collapsed)}
+              onHome={returnToHome}
             />
           )}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

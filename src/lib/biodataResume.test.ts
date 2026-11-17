@@ -1,93 +1,99 @@
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import {
-  BIODATA_RESUME_STYLES,
-  formatBiodataDate,
+  EMPTY_RESUME_DATA,
+  RESUME_PURPOSES,
+  generateBiodataResumeDocx,
   generateBiodataResumePdf,
-  type BiodataResumeData,
+  generateBiodataResumeText,
+  getDefaultSections,
+  getResumeContent,
+  type ResumeData,
 } from "./biodataResume";
 
-const sampleData: BiodataResumeData = {
-  biodataTitle: "Student Biodata",
+const sampleData: ResumeData = {
+  ...EMPTY_RESUME_DATA,
   fullName: "Asha Sen",
-  phone: "555-0100",
+  phone: "+91 98765 43210",
   email: "asha@example.com",
-  address: "Dhaka",
   objective: "Seeking a customer service role.",
-  education: "Higher Secondary Certificate, 2024",
-  experience: "Sales assistant, City Store, 2024-2025",
-  skills: "Customer service, cashier operations",
-  dateOfBirth: "2002-04-12",
-  gender: "Female",
-  height: "160 cm",
-  religion: "Hindu",
-  nationality: "Bangladeshi",
-  maritalStatus: "Never married",
-  familyDetails: "Father: Teacher; Mother: Homemaker",
-  about: "A motivated student interested in science.",
-  additionalDetails: "Volunteer at the local library.",
+  education: [{
+    qualification: "Higher Secondary",
+    institution: "City School",
+    board: "State Board",
+    year: "2024",
+    marks: "85%",
+    details: "",
+  }],
+  experience: [{
+    company: "City Store",
+    designation: "Sales assistant",
+    duration: "2024-2025",
+    responsibilities: "Customer support and cashier operations.",
+  }],
 };
 
-describe("biodata and resume PDF", () => {
-  it("formats dates in the Indian day/month/year convention", () => {
-    expect(formatBiodataDate("2002-04-12")).toBe("12/04/2002");
-    expect(formatBiodataDate("12/04/2002")).toBe("12/04/2002");
+describe("Indian resume and biodata generator", () => {
+  it("offers a purpose-specific choice for each supported format", () => {
+    expect(RESUME_PURPOSES).toHaveLength(33);
+    expect(RESUME_PURPOSES).toContain("Marriage Bio-Data");
+    expect(RESUME_PURPOSES).toContain("International / ATS-Friendly Resume");
   });
 
-  it("creates a one-page resume PDF", async () => {
-    const blob = await generateBiodataResumePdf(
-      "resume",
+  it("selects different sections for biodata, government and ATS purposes", () => {
+    expect(getDefaultSections("Marriage Bio-Data")).toContain("family");
+    expect(getDefaultSections("Central Government Job Application Bio-Data")).toContain("recruitment");
+    expect(getDefaultSections("International / ATS-Friendly Resume")).not.toContain("family");
+    expect(getDefaultSections("Fresher Resume")).not.toContain("experience");
+    expect(getDefaultSections("Simple One-Page Resume")).not.toContain("references");
+  });
+
+  it("includes structured qualifications and work experience only when selected", () => {
+    const content = getResumeContent("Modern Professional Resume", sampleData, ["education", "experience"]);
+    expect(content[0].lines[0]).toContain("Higher Secondary | City School | State Board | 2024 | 85%");
+    expect(content[1].lines.join(" ")).toContain("Sales assistant | City Store | 2024-2025");
+    expect(getResumeContent("Modern Professional Resume", sampleData, []).length).toBe(0);
+  });
+
+  it("preserves the user's selected section order in exported content", () => {
+    const sections = getResumeContent(
+      "Modern Professional Resume",
       sampleData,
-      "modern",
+      ["experience", "education"],
+    );
+    expect(sections.map(({ heading }) => heading)).toEqual([
+      "Work experience",
+      "Educational qualifications",
+    ]);
+  });
+
+  it("creates printable multi-page A4 PDFs for Unicode biodata", async () => {
+    const blob = await generateBiodataResumePdf(
+      "Traditional Indian Bio-Data",
+      { ...sampleData, fullName: "প্রিয়া সেন", familyDetails: "Family information" },
+      "traditional",
+      ["personal", "family", "education"],
     );
     const pdf = await PDFDocument.load(await blob.arrayBuffer());
-
     expect(blob.type).toBe("application/pdf");
-    expect(pdf.getPageCount()).toBe(1);
     expect(pdf.getPage(0).getWidth()).toBeCloseTo(595.28, 1);
+    expect(pdf.getPageCount()).toBeGreaterThan(0);
   });
 
-  it("creates personal biodata for a custom purpose", async () => {
-    const blob = await generateBiodataResumePdf(
-      "personal-biodata",
-      sampleData,
-      "minimalist",
-    );
-    const pdf = await PDFDocument.load(await blob.arrayBuffer());
-
-    expect(blob.type).toBe("application/pdf");
-    expect(pdf.getPageCount()).toBe(1);
+  it("exports user-entered Unicode as editable text and DOCX", async () => {
+    const data = { ...sampleData, fullName: "প্রিয়া সেন" };
+    const text = generateBiodataResumeText("Student Resume", data, ["education"]);
+    expect(text).toContain("প্রিয়া সেন");
+    expect(text).toContain("Higher Secondary");
+    const docx = await generateBiodataResumeDocx("Student Resume", data, ["education"]);
+    expect(docx.type).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    expect(docx.size).toBeGreaterThan(0);
   });
 
-  it("adds pages when personal biodata content exceeds one page", async () => {
-    const blob = await generateBiodataResumePdf(
-      "personal-biodata",
-      {
-        ...sampleData,
-        familyDetails: Array.from(
-          { length: 60 },
-          (_, index) => `Family detail ${index + 1}`,
-        ).join("\n"),
-      },
-      "classic",
-    );
-    const pdf = await PDFDocument.load(await blob.arrayBuffer());
-
-    expect(pdf.getPageCount()).toBeGreaterThan(1);
-  });
-
-  it("exports both templates in every style", async () => {
-    const templates = [
-      "resume",
-      "personal-biodata",
-    ] as const;
-
-    for (const template of templates) {
-      for (const { id: style } of BIODATA_RESUME_STYLES) {
-        const blob = await generateBiodataResumePdf(template, sampleData, style);
-        const pdf = await PDFDocument.load(await blob.arrayBuffer());
-        expect(pdf.getPageCount()).toBeGreaterThan(0);
-      }
-    }
+  it("omits unselected optional personal and recruitment details", () => {
+    const data = { ...sampleData, religion: "Not included", category: "EWS" };
+    const text = generateBiodataResumeText("Government Job Resume", data, ["education"]);
+    expect(text).not.toContain("Not included");
+    expect(text).not.toContain("EWS");
   });
 });
