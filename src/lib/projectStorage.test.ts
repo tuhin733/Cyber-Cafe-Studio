@@ -3,6 +3,13 @@ import { DEFAULT_LAYOUT } from "../constants";
 import { loadProject, serializeProject } from "./projectStorage";
 
 beforeEach(() => {
+  const storage = (
+    globalThis as typeof globalThis & { jsdom: { window: Window } }
+  ).jsdom.window.localStorage;
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: storage,
+  });
   localStorage.clear();
   const urlCtor = globalThis.URL;
   Object.assign(urlCtor, {
